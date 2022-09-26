@@ -37,7 +37,8 @@ type daemonConfig struct {
 const DefaultShimTimeout = "60s"
 
 var vspherecfg vsphere.Config
-var ibmcfg ibmcloud.Config
+var ibmvpccfg ibmcloud.VpcConfig
+var ibmpvscfg ibmcloud.PowerVSConfig
 var awscfg aws.Config
 var azurecfg azure.Config
 var libvirtcfg libvirt.Config
@@ -107,32 +108,48 @@ func (cfg *daemonConfig) Setup() (cmd.Starter, error) {
 		defaultToEnv(&azurecfg.ClientSecret, "AZURE_CLIENT_SECRET")
 		defaultToEnv(&azurecfg.TenantId, "AZURE_TENANT_ID")
 
-	case "ibmcloud":
+	case "ibmcloud-vpc":
 		cmd.Parse("ibmcloud", os.Args[1:], func(flags *flag.FlagSet) {
-			flags.StringVar(&ibmcfg.ApiKey, "api-key", "", "IBM Cloud API key, defaults to `IBMCLOUD_API_KEY`")
-			flags.StringVar(&ibmcfg.IamServiceURL, "iam-service-url", "https://iam.cloud.ibm.com/identity/token", "IBM Cloud IAM Service URL")
-			flags.StringVar(&ibmcfg.VpcServiceURL, "vpc-service-url", "https://jp-tok.iaas.cloud.ibm.com/v1", "IBM Cloud VPC Service URL")
-			flags.StringVar(&ibmcfg.ResourceGroupID, "resource-group-id", "", "Resource Group ID")
-			flags.StringVar(&ibmcfg.ProfileName, "profile-name", "", "Profile name")
-			flags.StringVar(&ibmcfg.ZoneName, "zone-name", "", "Zone name")
-			flags.StringVar(&ibmcfg.ImageID, "image-id", "", "Image ID")
-			flags.StringVar(&ibmcfg.PrimarySubnetID, "primary-subnet-id", "", "Primary subnet ID")
-			flags.StringVar(&ibmcfg.PrimarySecurityGroupID, "primary-security-group-id", "", "Primary security group ID")
-			flags.StringVar(&ibmcfg.SecondarySubnetID, "secondary-subnet-id", "", "Secondary subnet ID")
-			flags.StringVar(&ibmcfg.SecondarySecurityGroupID, "secondary-security-group-id", "", "Secondary security group ID")
-			flags.StringVar(&ibmcfg.KeyID, "key-id", "", "SSH Key ID")
-			flags.StringVar(&ibmcfg.VpcID, "vpc-id", "", "VPC ID")
+			flags.StringVar(&ibmvpccfg.ApiKey, "api-key", "", "IBM Cloud API key, defaults to `IBMCLOUD_API_KEY`")
+			flags.StringVar(&ibmvpccfg.IamServiceURL, "iam-service-url", "https://iam.cloud.ibm.com/identity/token", "IBM Cloud IAM Service URL")
+			flags.StringVar(&ibmvpccfg.VpcServiceURL, "vpc-service-url", "https://jp-tok.iaas.cloud.ibm.com/v1", "IBM Cloud VPC Service URL")
+			flags.StringVar(&ibmvpccfg.ResourceGroupID, "resource-group-id", "", "Resource Group ID")
+			flags.StringVar(&ibmvpccfg.ProfileName, "profile-name", "", "Profile name")
+			flags.StringVar(&ibmvpccfg.ZoneName, "zone-name", "", "Zone name")
+			flags.StringVar(&ibmvpccfg.ImageID, "image-id", "", "Image ID")
+			flags.StringVar(&ibmvpccfg.PrimarySubnetID, "primary-subnet-id", "", "Primary subnet ID")
+			flags.StringVar(&ibmvpccfg.PrimarySecurityGroupID, "primary-security-group-id", "", "Primary security group ID")
+			flags.StringVar(&ibmvpccfg.SecondarySubnetID, "secondary-subnet-id", "", "Secondary subnet ID")
+			flags.StringVar(&ibmvpccfg.SecondarySecurityGroupID, "secondary-security-group-id", "", "Secondary security group ID")
+			flags.StringVar(&ibmvpccfg.KeyID, "key-id", "", "SSH Key ID")
+			flags.StringVar(&ibmvpccfg.VpcID, "vpc-id", "", "VPC ID")
 			flags.StringVar(&hypcfg.SocketPath, "socket", hypervisor.DefaultSocketPath, "Unix domain socket path of remote hypervisor service")
 			flags.StringVar(&hypcfg.PodsDir, "pods-dir", hypervisor.DefaultPodsDir, "base directory for pod directories")
 			flags.StringVar(&hypcfg.HypProvider, "provider", "ibmcloud", "Hypervisor provider")
 			flags.StringVar(&hypcfg.CriSocketPath, "cri-runtime-endpoint", "", "cri runtime uds endpoint")
 			flags.StringVar(&hypcfg.PauseImage, "pause-image", "", "pause image to be used for the pods")
+		})
+		defaultToEnv(&ibmvpccfg.ApiKey, "IBMCLOUD_API_KEY")
+
+	case "ibmcloud-powervs":
+		cmd.Parse("ibmcloud-powervs", os.Args[1:], func(flags *flag.FlagSet) {
+			flags.StringVar(&ibmpvscfg.ApiKey, "api-key", "", "IBM Cloud API key")
+			flags.StringVar(&ibmpvscfg.Zone, "zone", "", "PowerVS zone")
+			flags.StringVar(&ibmpvscfg.ServiceInstanceID, "service-instance-id", "", "ID of the PowerVS Service Instance")
+			flags.StringVar(&ibmpvscfg.NetworkID, "network-id", "", "ID of the network instance")
+			flags.StringVar(&ibmpvscfg.ImageID, "image-id", "", "ID of the boot image")
+			flags.StringVar(&ibmpvscfg.SSHKey, "ssh-key", "", "Name of the SSH Key")
+			flags.StringVar(&hypcfg.SocketPath, "socket", hypervisor.DefaultSocketPath, "Unix domain socket path of remote hypervisor service")
+			flags.StringVar(&hypcfg.PodsDir, "pods-dir", hypervisor.DefaultPodsDir, "base directory for pod directories")
+			flags.StringVar(&hypcfg.HypProvider, "provider", "ibmcloud-powervs", "Hypervisor provider")
 			flags.StringVar(&cfg.TunnelType, "tunnel-type", podnetwork.DefaultTunnelType, "Tunnel provider")
 			flags.StringVar(&cfg.HostInterface, "host-interface", "", "Host Interface")
+			flags.StringVar(&hypcfg.CriSocketPath, "cri-runtime-endpoint", "", "cri runtime uds endpoint")
+			flags.StringVar(&hypcfg.PauseImage, "pause-image", "", "pause image to be used for the pods")
 			flags.IntVar(&cfg.VXLANPort, "vxlan-port", vxlan.DefaultVXLANPort, "VXLAN UDP port number (VXLAN tunnel mode only")
 			flags.IntVar(&cfg.VXLANMinID, "vxlan-min-id", vxlan.DefaultVXLANMinID, "Minimum VXLAN ID (VXLAN tunnel mode only")
 		})
-		defaultToEnv(&ibmcfg.ApiKey, "IBMCLOUD_API_KEY")
+		defaultToEnv(&ibmpvscfg.ApiKey, "IBMCLOUD_API_KEY")
 
 	case "libvirt":
 		cmd.Parse("libvirt", os.Args[1:], func(flags *flag.FlagSet) {
@@ -191,8 +208,10 @@ func (cfg *daemonConfig) Setup() (cmd.Starter, error) {
 
 	var hypervisorServer hypervisor.Server
 
-	if hypcfg.HypProvider == "ibmcloud" {
-		hypervisorServer = registry.NewServer(hypcfg, ibmcfg, workerNode, daemon.DefaultListenPort)
+	if hypcfg.HypProvider == "ibmcloud-vpc" {
+		hypervisorServer = registry.NewServer(hypcfg, ibmvpccfg, workerNode, daemon.DefaultListenPort)
+	} else if hypcfg.HypProvider == "ibmcloud-powervs" {
+		hypervisorServer = registry.NewServer(hypcfg, ibmpvscfg, workerNode, daemon.DefaultListenPort)
 	} else if hypcfg.HypProvider == "aws" {
 		hypervisorServer = registry.NewServer(hypcfg, awscfg, workerNode, daemon.DefaultListenPort)
 	} else if hypcfg.HypProvider == "libvirt" {

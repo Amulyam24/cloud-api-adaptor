@@ -39,7 +39,7 @@ func newProxyService(dialer func(context.Context) (net.Conn, error), criClient *
 
 func (s *proxyService) getImageFromDigest(ctx context.Context, digest string) (string, error) {
 	if s.criClient == nil {
-		return "", fmt.Errorf("getImageFromDigest: criClient is nil.")
+		return "", fmt.Errorf("getImageFromDigest: criClient is nil")
 	}
 
 	req := &criapi.ListImagesRequest{}
@@ -55,7 +55,7 @@ func (s *proxyService) getImageFromDigest(ctx context.Context, digest string) (s
 			return img.RepoTags[0], nil
 		}
 	}
-	return "", fmt.Errorf("Did not find imageTag from image digest %s", digest)
+	return "", fmt.Errorf("did not find imageTag from image digest %s", digest)
 }
 
 func (s *proxyService) getImageName(annotations map[string]string) (string, error) {

@@ -25,7 +25,7 @@ import (
 const (
 	SocketName = "agent.ttrpc"
 
-	defaultMaxRetries    = 20
+	defaultMaxRetries    = 50
 	defaultRetryInterval = 10 * time.Second
 )
 
@@ -124,7 +124,7 @@ func initCriClient(ctx context.Context, target string) (*criClient, error) {
 		return criClient, nil
 	}
 
-	return nil, fmt.Errorf("cri runtime endpoint is not specified, it is used to get the image name from image digest.")
+	return nil, fmt.Errorf("cri runtime endpoint is not specified, it is used to get the image name from image digest")
 }
 
 func (p *agentProxy) Start(ctx context.Context, serverURL *url.URL) error {

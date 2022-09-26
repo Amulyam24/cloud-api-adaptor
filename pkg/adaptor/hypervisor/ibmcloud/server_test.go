@@ -162,8 +162,8 @@ func newServer(t *testing.T, socketPath, podsDir string) hypervisor.Server {
 			PodsDir:     podsDir,
 			HypProvider: "ibmcloud",
 		}
-		srv := NewServer(cfg, Config{}, &mockWorkerNode{}, port)
-		srv.(*server).service.(*hypervisorService).vpcV1 = &mockVpcV1{}
+		srv := NewVPCServer(cfg, VpcConfig{}, &mockWorkerNode{}, port)
+		srv.(*vpcServer).service.(*hypervisorVPCService).vpcV1 = &mockVpcV1{}
 		return srv
 	}
 	log.Print("Using IBM Cloud...")
@@ -176,7 +176,7 @@ func newServer(t *testing.T, socketPath, podsDir string) hypervisor.Server {
 	if keyId == "" {
 		t.Fatal("Specify the SSH key ID as KEY_ID")
 	}
-	serviceConfig := Config{
+	serviceConfig := VpcConfig{
 		ApiKey:                   apiKey,
 		IamServiceURL:            "https://iam.cloud.ibm.com/identity/token",
 		VpcServiceURL:            "https://jp-tok.iaas.cloud.ibm.com/v1",
@@ -197,7 +197,7 @@ func newServer(t *testing.T, socketPath, podsDir string) hypervisor.Server {
 		PodsDir:     podsDir,
 		HypProvider: "ibmcloud",
 	}
-	srv := NewServer(cfg, serviceConfig, &mockWorkerNode{}, daemon.DefaultListenPort)
+	srv := NewVPCServer(cfg, serviceConfig, &mockWorkerNode{}, daemon.DefaultListenPort)
 
 	return srv
 }

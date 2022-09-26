@@ -16,16 +16,13 @@ import (
 
 	"github.com/containerd/ttrpc"
 	pbHypervisor "github.com/kata-containers/kata-containers/src/runtime/protocols/hypervisor"
-
-	pbPodVMInfo "github.com/confidential-containers/cloud-api-adaptor/proto/podvminfo"
 )
 
-type vpcServer struct {
+type PowerVSServer struct {
 	socketPath string
 
-	ttRpc         *ttrpc.Server
-	service       pbHypervisor.HypervisorService
-	vmInfoService pbPodVMInfo.PodVMInfoService
+	ttRpc   *ttrpc.Server
+	service pbHypervisor.HypervisorService
 
 	workerNode podnetwork.WorkerNode
 
@@ -34,35 +31,27 @@ type vpcServer struct {
 	stopOnce sync.Once
 }
 
-func NewVPCServer(cfg hypervisor.Config, cloudCfg VpcConfig, workerNode podnetwork.WorkerNode, daemonPort string) hypervisor.Server {
+func NewPowerVSServer(cfg hypervisor.Config, cloudCfg PowerVSConfig, workerNode podnetwork.WorkerNode, daemonPort string) hypervisor.Server {
 
 	logger.Printf("hypervisor config %v", cfg)
 	logger.Printf("cloud config %v", cloudCfg.Redact())
 
-	var vpcV1 VpcV1
-	if cloudCfg.ApiKey != "" {
-		//FIXME: Null ApiKey is used in unit tests
-		var err error
-		vpcV1, err = NewVpcV1(cloudCfg.ApiKey, cloudCfg.IamServiceURL, cloudCfg.VpcServiceURL)
-		if err != nil {
-			panic(err)
-		}
+	powervs, err := NewPowervsService(cloudCfg.ApiKey, cloudCfg.ServiceInstanceID, cloudCfg.Zone)
+	if err != nil {
+		panic(err)
 	}
-
-	s := &vpcServer{
+	s := &PowerVSServer{
 		socketPath: cfg.SocketPath,
-		service:    newVPCService(vpcV1, &cloudCfg, &cfg, workerNode, cfg.PodsDir, daemonPort),
+		service:    newPowerVSService(powervs, &cloudCfg, &cfg, workerNode, cfg.PodsDir, daemonPort),
 		workerNode: workerNode,
 		readyCh:    make(chan struct{}),
 		stopCh:     make(chan struct{}),
 	}
 
-	s.vmInfoService = newPodVMInfoService(s.service.(*hypervisorVPCService)) // TODO: refactor not to use type casting
-
 	return s
 }
 
-func (s *vpcServer) Start(ctx context.Context) (err error) {
+func (s *PowerVSServer) Start(ctx context.Context) (err error) {
 
 	ttRpc, err := ttrpc.NewServer()
 	if err != nil {
@@ -76,7 +65,6 @@ func (s *vpcServer) Start(ctx context.Context) (err error) {
 		return err
 	}
 	pbHypervisor.RegisterHypervisorService(s.ttRpc, s.service)
-	pbPodVMInfo.RegisterPodVMInfoService(s.ttRpc, s.vmInfoService)
 
 	listener, err := net.Listen("unix", s.socketPath)
 	if err != nil {
@@ -111,13 +99,13 @@ func (s *vpcServer) Start(ctx context.Context) (err error) {
 	return err
 }
 
-func (s *vpcServer) Shutdown() error {
+func (s *PowerVSServer) Shutdown() error {
 	s.stopOnce.Do(func() {
 		close(s.stopCh)
 	})
 	return nil
 }
 
-func (s *vpcServer) Ready() chan struct{} {
+func (s *PowerVSServer) Ready() chan struct{} {
 	return s.readyCh
 }

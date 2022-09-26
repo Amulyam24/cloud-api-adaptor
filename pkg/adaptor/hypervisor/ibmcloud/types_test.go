@@ -11,7 +11,7 @@ import (
 func TestIBMCloudMasking(t *testing.T) {
 	apiKey := "abcdefg"
 	zoneName := "eu-gb"
-	cloudCfg := Config{
+	cloudCfg := VpcConfig{
 		ApiKey:   apiKey,
 		ZoneName: zoneName,
 	}

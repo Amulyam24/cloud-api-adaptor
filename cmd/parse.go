@@ -19,7 +19,7 @@ func Parse(programName string, args []string, fn func(flags *flag.FlagSet)) {
 	fn(flags)
 
 	switch programName {
-	case "ibmcloud":
+	case "ibmcloud-vpc":
 		if len(args) < 10 {
 			flags.PrintDefaults()
 			Exit(1)

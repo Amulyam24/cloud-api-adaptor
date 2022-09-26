@@ -95,8 +95,8 @@ func TestShim(t *testing.T) {
 		PodsDir:     podsDir,
 		HypProvider: "ibmcloud",
 	}
-	srv := NewServer(cfg, Config{}, workerNode, port)
-	srv.(*server).service.(*hypervisorService).vpcV1 = &mockVpcV1{primaryIP: primaryIP, secondaryIP: secondaryIP}
+	srv := NewVPCServer(cfg, VpcConfig{}, workerNode, port)
+	srv.(*vpcServer).service.(*hypervisorVPCService).vpcV1 = &mockVpcV1{primaryIP: primaryIP, secondaryIP: secondaryIP}
 
 	serverDone := make(chan struct{})
 	go func() {
