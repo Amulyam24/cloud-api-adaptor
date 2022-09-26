@@ -6,6 +6,7 @@ package ibmcloud
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,9 +16,9 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 
-	"github.com/IBM/vpc-go-sdk/vpcv1"
+	"github.com/IBM-Cloud/power-go-client/power/models"
+	"github.com/IBM/go-sdk-core/v5/core"
 
 	"github.com/confidential-containers/cloud-api-adaptor/pkg/adaptor/hypervisor"
 	"github.com/confidential-containers/cloud-api-adaptor/pkg/adaptor/proxy"
@@ -30,17 +31,9 @@ import (
 	pb "github.com/kata-containers/kata-containers/src/runtime/protocols/hypervisor"
 )
 
-// TODO: implement a ttrpc server to serve hypervisor RPC calls from kata shim
-// https://github.com/kata-containers/kata-containers/blob/2.2.0-alpha1/src/runtime/virtcontainers/hypervisor.go#L843-L883
-
-const (
-	maxRetries    = 10
-	queryInterval = 2
-)
-
-type hypervisorVPCService struct {
-	vpcV1            VpcV1
-	serviceConfig    *VpcConfig
+type hypervisorPVSService struct {
+	powervsService   PowerVS
+	serviceConfig    *PowerVSConfig
 	hypervisorConfig *hypervisor.Config
 	sandboxes        map[sandboxID]*sandbox
 	podsDir          string
@@ -50,7 +43,9 @@ type hypervisorVPCService struct {
 	sync.Mutex
 }
 
-func newVPCService(vpcV1 VpcV1, config *VpcConfig, hypervisorConfig *hypervisor.Config, workerNode podnetwork.WorkerNode, podsDir, daemonPort string) pb.HypervisorService {
+const maxInstanceNameLength = 45
+
+func newPowerVSService(powervs PowerVS, config *PowerVSConfig, hypervisorConfig *hypervisor.Config, workerNode podnetwork.WorkerNode, podsDir, daemonPort string) pb.HypervisorService {
 
 	logger.Printf("service config %v", config.Redact())
 
@@ -64,8 +59,8 @@ func newVPCService(vpcV1 VpcV1, config *VpcConfig, hypervisorConfig *hypervisor.
 		hostname = hostname[0:i]
 	}
 
-	return &hypervisorVPCService{
-		vpcV1:            vpcV1,
+	return &hypervisorPVSService{
+		powervsService:   powervs,
 		serviceConfig:    config,
 		hypervisorConfig: hypervisorConfig,
 		sandboxes:        map[sandboxID]*sandbox{},
@@ -76,11 +71,11 @@ func newVPCService(vpcV1 VpcV1, config *VpcConfig, hypervisorConfig *hypervisor.
 	}
 }
 
-func (s *hypervisorVPCService) Version(ctx context.Context, req *pb.VersionRequest) (*pb.VersionResponse, error) {
+func (s *hypervisorPVSService) Version(ctx context.Context, req *pb.VersionRequest) (*pb.VersionResponse, error) {
 	return &pb.VersionResponse{Version: Version}, nil
 }
 
-func (s *hypervisorVPCService) CreateVM(ctx context.Context, req *pb.CreateVMRequest) (*pb.CreateVMResponse, error) {
+func (s *hypervisorPVSService) CreateVM(ctx context.Context, req *pb.CreateVMRequest) (*pb.CreateVMResponse, error) {
 
 	sid := sandboxID(req.Id)
 
@@ -92,12 +87,11 @@ func (s *hypervisorVPCService) CreateVM(ctx context.Context, req *pb.CreateVMReq
 	if _, exists := s.sandboxes[sid]; exists {
 		return nil, fmt.Errorf("sandbox %s already exists", sid)
 	}
-	pod := hvutil.GetPodName(req.Annotations)
+	pod := req.Annotations[annotations.SandboxName]
 	if pod == "" {
 		return nil, fmt.Errorf("pod name %s is missing in annotations", annotations.SandboxName)
 	}
-
-	namespace := hvutil.GetPodNamespace(req.Annotations)
+	namespace := req.Annotations[annotations.SandboxNamespace]
 	if namespace == "" {
 		return nil, fmt.Errorf("namespace name %s is missing in annotations", annotations.SandboxNamespace)
 	}
@@ -107,7 +101,10 @@ func (s *hypervisorVPCService) CreateVM(ctx context.Context, req *pb.CreateVMReq
 		return nil, fmt.Errorf("failed to create a pod directory: %s: %w", podDirPath, err)
 	}
 
+	logger.Printf("PodsDIRpath: %s", podDirPath)
+
 	socketPath := filepath.Join(podDirPath, proxy.SocketName)
+	logger.Printf("SocketPath: %s", socketPath)
 
 	netNSPath := req.NetworkNamespacePath
 
@@ -132,18 +129,14 @@ func (s *hypervisorVPCService) CreateVM(ctx context.Context, req *pb.CreateVMReq
 	return &pb.CreateVMResponse{AgentSocketPath: socketPath}, nil
 }
 
-const maxInstanceNameLen = 63
-
-func (s *hypervisorVPCService) StartVM(ctx context.Context, req *pb.StartVMRequest) (*pb.StartVMResponse, error) {
+func (s *hypervisorPVSService) StartVM(ctx context.Context, req *pb.StartVMRequest) (*pb.StartVMResponse, error) {
 
 	sandbox, err := s.getSandbox(req.Id)
 	if err != nil {
 		return nil, err
 	}
 
-	vmName := hvutil.CreateInstanceName(sandbox.pod, string(sandbox.id), maxInstanceNameLen)
-
-	logger.Printf("StartVM: vmName: %q", vmName)
+	vmName := hvutil.CreateInstanceName(sandbox.pod, string(sandbox.id), maxInstanceNameLength)
 
 	daemonConfig := daemon.Config{
 		PodNamespace: sandbox.namespace,
@@ -170,92 +163,53 @@ func (s *hypervisorVPCService) StartVM(ctx context.Context, req *pb.StartVMReque
 		},
 	}
 
-	if authJSON, err := os.ReadFile(cloudinit.DefaultAuthfileSrcPath); err == nil {
-		if json.Valid(authJSON) && (len(authJSON) < cloudinit.DefaultAuthfileLimit) {
-			cloudConfig.WriteFiles = append(cloudConfig.WriteFiles,
-				cloudinit.WriteFile{
-					Path:    cloudinit.DefaultAuthfileDstPath,
-					Content: cloudinit.AuthJSONToResourcesJSON(string(authJSON)),
-				})
-		} else if len(authJSON) >= cloudinit.DefaultAuthfileLimit {
-			logger.Printf("Credentials file size (%d) is too large to use as userdata, ignored", len(authJSON))
-		} else {
-			logger.Printf("Credentials file is not in a valid Json format, ignored")
-		}
-	}
-
 	userData, err := cloudConfig.Generate()
 	if err != nil {
 		return nil, err
 	}
-
-	prototype := &vpcv1.InstancePrototype{
-		Name:     &vmName,
-		Image:    &vpcv1.ImageIdentity{ID: &s.serviceConfig.ImageID},
-		UserData: &userData,
-		Profile:  &vpcv1.InstanceProfileIdentity{Name: &s.serviceConfig.ProfileName},
-		Zone:     &vpcv1.ZoneIdentity{Name: &s.serviceConfig.ZoneName},
-		Keys: []vpcv1.KeyIdentityIntf{
-			&vpcv1.KeyIdentity{ID: &s.serviceConfig.KeyID},
-		},
-		VPC: &vpcv1.VPCIdentity{ID: &s.serviceConfig.VpcID},
-		PrimaryNetworkInterface: &vpcv1.NetworkInterfacePrototype{
-			Subnet: &vpcv1.SubnetIdentity{ID: &s.serviceConfig.PrimarySubnetID},
-			SecurityGroups: []vpcv1.SecurityGroupIdentityIntf{
-				&vpcv1.SecurityGroupIdentityByID{ID: &s.serviceConfig.PrimarySecurityGroupID},
-			},
-		},
-	}
-	if s.serviceConfig.ResourceGroupID != "" {
-		prototype.ResourceGroup = &vpcv1.ResourceGroupIdentity{ID: &s.serviceConfig.ResourceGroupID}
-	}
-	if s.serviceConfig.SecondarySubnetID != "" {
-		prototype.NetworkInterfaces = []vpcv1.NetworkInterfacePrototype{
+	body := &models.PVMInstanceCreate{
+		ServerName:  &vmName,
+		ImageID:     &s.serviceConfig.ImageID,
+		KeyPairName: s.serviceConfig.SSHKey,
+		Networks: []*models.PVMInstanceAddNetwork{
 			{
-				AllowIPSpoofing: func(b bool) *bool { return &b }(true),
-				Subnet:          &vpcv1.SubnetIdentity{ID: &s.serviceConfig.SecondarySubnetID},
-				SecurityGroups: []vpcv1.SecurityGroupIdentityIntf{
-					&vpcv1.SecurityGroupIdentityByID{ID: &s.serviceConfig.SecondarySecurityGroupID},
-				},
-			},
-		}
+				NetworkID: &s.serviceConfig.NetworkID,
+			}},
+		Memory:     core.Float64Ptr(4),
+		Processors: core.Float64Ptr(0.25),
+		ProcType:   core.StringPtr("shared"),
+		SysType:    "s922",
+		UserData:   base64.StdEncoding.EncodeToString([]byte(userData)),
 	}
 
-	result, resp, err := s.vpcV1.CreateInstance(&vpcv1.CreateInstanceOptions{InstancePrototype: prototype})
+	response, err := s.powervsService.CreateInstance(body)
 	if err != nil {
-		logger.Printf("failed to create an instance : %v and the response is %s", err, resp)
+		logger.Printf("failed to create an instance : %v", err)
 		return nil, err
 	}
 
-	s.Lock()
-	sandbox.vsi = *result.ID
-	s.Unlock()
+	ins := (*response)[0]
+	sandbox.vsi = *ins.PvmInstanceID
+	vmState := ins.Status
 
-	logger.Printf("created an instance %s for sandbox %s", *result.Name, req.Id)
-
+	logger.Printf("created an instance %s for sandbox %s", *ins.ServerName, req.Id)
 	var podNodeIPs []net.IP
 
-	for retries := 0; retries < maxRetries; retries++ {
-
-		ips, err := getIPs(prototype, result)
-
-		if err == nil {
-			podNodeIPs = ips
-			break
-		} else if err != errNotReady {
-			return nil, err
-		}
-
-		time.Sleep(time.Duration(queryInterval) * time.Second)
-
-		var id string = *result.ID
-		getResult, resp, err := s.vpcV1.GetInstance(&vpcv1.GetInstanceOptions{ID: &id})
+	for *vmState != "ACTIVE" {
+		in, err := s.powervsService.Get(*ins.PvmInstanceID)
 		if err != nil {
-			logger.Printf("failed to get an instance : %v and the response is %s", err, resp)
-			return nil, err
+			return nil, fmt.Errorf("failed to get the instance: %w", err)
 		}
-		result = getResult
+		logger.Printf("Current VM state: %s", *vmState)
+		vmState = in.Status
 	}
+	logger.Printf("instance is in desired state: %s", *vmState)
+
+	podNodeIPs, err = getVMIPs(ins, s.powervsService)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get IPs for the instance : %w", err)
+	}
+	logger.Printf("IPs fetched for the instance")
 
 	if err := s.workerNode.Setup(sandbox.netNSPath, podNodeIPs, sandbox.podNetworkConfig); err != nil {
 		return nil, fmt.Errorf("failed to set up pod network tunnel on netns %s: %w", sandbox.netNSPath, err)
@@ -266,6 +220,7 @@ func (s *hypervisorVPCService) StartVM(ctx context.Context, req *pb.StartVMReque
 		Host:   net.JoinHostPort(podNodeIPs[0].String(), s.daemonPort),
 		Path:   daemon.AgentURLPath,
 	}
+	logger.Printf("Service URL hostpath: %s%s", serverURL.Host, serverURL.Path)
 
 	errCh := make(chan error)
 	go func() {
@@ -290,7 +245,7 @@ func (s *hypervisorVPCService) StartVM(ctx context.Context, req *pb.StartVMReque
 	return &pb.StartVMResponse{}, nil
 }
 
-func (s *hypervisorVPCService) getSandbox(id string) (*sandbox, error) {
+func (s *hypervisorPVSService) getSandbox(id string) (*sandbox, error) {
 
 	sid := sandboxID(id)
 
@@ -305,7 +260,7 @@ func (s *hypervisorVPCService) getSandbox(id string) (*sandbox, error) {
 	return s.sandboxes[sid], nil
 }
 
-func (s *hypervisorVPCService) deleteSandbox(id string) error {
+func (s *hypervisorPVSService) deleteSandbox(id string) error {
 	sid := sandboxID(id)
 	if id == "" {
 		return errors.New("empty sandbox id")
@@ -316,55 +271,39 @@ func (s *hypervisorVPCService) deleteSandbox(id string) error {
 	return nil
 }
 
-var errNotReady = errors.New("address not ready")
-
-func getIPs(prototype *vpcv1.InstancePrototype, result *vpcv1.Instance) ([]net.IP, error) {
-
-	if len(result.NetworkInterfaces) < 1+len(prototype.NetworkInterfaces) {
-		return nil, errNotReady
-	}
-
-	interfaces := []*vpcv1.NetworkInterfaceInstanceContextReference{result.PrimaryNetworkInterface}
-	for i, nic := range result.NetworkInterfaces {
-		if *nic.ID != *result.PrimaryNetworkInterface.ID {
-			interfaces = append(interfaces, &result.NetworkInterfaces[i])
-		}
-	}
-
+func getVMIPs(instance *models.PVMInstance, service PowerVS) ([]net.IP, error) {
 	var podNodeIPs []net.IP
+	in, err := service.Get(*instance.PvmInstanceID)
+	if err != nil {
+		fmt.Println("failed to get the instance: %w", err)
+	}
+	for i, nic := range in.Networks {
 
-	for i, nic := range interfaces {
-
-		addr := nic.PrimaryIpv4Address
-		if addr == nil || *addr == "" || *addr == "0.0.0.0" {
-			return nil, errNotReady
-		}
-
+		addr := &nic.IPAddress
 		ip := net.ParseIP(*addr)
 		if ip == nil {
 			return nil, fmt.Errorf("failed to parse pod node IP %q", *addr)
 		}
-		podNodeIPs = append(podNodeIPs, ip)
 
+		podNodeIPs = append(podNodeIPs, ip)
 		logger.Printf("podNodeIP[%d]=%s", i, ip.String())
 	}
 
 	return podNodeIPs, nil
 }
 
-func (s *hypervisorVPCService) deleteInstance(ctx context.Context, id string) error {
-	options := &vpcv1.DeleteInstanceOptions{}
-	options.SetID(id)
-	resp, err := s.vpcV1.DeleteInstance(options)
+func (s *hypervisorPVSService) deleteInstance(ctx context.Context, id string) error {
+
+	err := s.powervsService.DeleteInstance(id)
 	if err != nil {
-		logger.Printf("failed to delete an instance: %v and the response is %v", err, resp)
+		logger.Printf("failed to delete an instance: %v", err)
 		return err
 	}
 	logger.Printf("deleted an instance %s", id)
 	return nil
 }
 
-func (s *hypervisorVPCService) StopVM(ctx context.Context, req *pb.StopVMRequest) (*pb.StopVMResponse, error) {
+func (s *hypervisorPVSService) StopVM(ctx context.Context, req *pb.StopVMRequest) (*pb.StopVMResponse, error) {
 	sandbox, err := s.getSandbox(req.Id)
 	if err != nil {
 		return nil, err

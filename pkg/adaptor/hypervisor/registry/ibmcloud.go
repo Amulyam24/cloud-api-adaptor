@@ -1,3 +1,4 @@
+//go:build ibmcloud
 // +build ibmcloud
 
 package registry
@@ -9,5 +10,9 @@ import (
 )
 
 func newServer(cfg hypervisor.Config, cloudConfig interface{}, workerNode podnetwork.WorkerNode, daemonPort string) hypervisor.Server {
-	return ibmcloud.NewServer(cfg, cloudConfig.(ibmcloud.Config), workerNode, daemonPort)
+	if cfg.HypProvider == "ibmcloud-vpc" {
+		return ibmcloud.NewVPCServer(cfg, cloudConfig.(ibmcloud.VpcConfig), workerNode, daemonPort)
+	} else {
+		return ibmcloud.NewPowerVSServer(cfg, cloudConfig.(ibmcloud.PowerVSConfig), workerNode, daemonPort)
+	}
 }

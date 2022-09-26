@@ -12,10 +12,10 @@ import (
 )
 
 type podVMInfoService struct {
-	srv *hypervisorService
+	srv *hypervisorVPCService
 }
 
-func newPodVMInfoService(srv *hypervisorService) pb.PodVMInfoService {
+func newPodVMInfoService(srv *hypervisorVPCService) pb.PodVMInfoService {
 	return &podVMInfoService{srv}
 }
 
