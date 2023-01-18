@@ -22,17 +22,11 @@ type VpcConfig struct {
 	VpcID                    string
 }
 
-type PowerVSConfig struct {
-	ApiKey            string
-	Zone              string
-	ServiceInstanceID string
-	NetworkID         string
-	ImageID           string
-	SSHKey            string
-}
-
-func (c PowerVSConfig) Redact() PowerVSConfig {
-	return *util.RedactStruct(&c, "ApiKey").(*PowerVSConfig)
+type PowerVCConfig struct {
+	NetworkID string
+	ImageID   string
+	SSHKey    string
+	FlavorID  string
 }
 
 func (c VpcConfig) Redact() VpcConfig {

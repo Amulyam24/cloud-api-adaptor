@@ -18,7 +18,7 @@ import (
 	pbHypervisor "github.com/kata-containers/kata-containers/src/runtime/protocols/hypervisor"
 )
 
-type PowerVSServer struct {
+type PowerVCServer struct {
 	socketPath string
 
 	ttRpc   *ttrpc.Server
@@ -31,27 +31,27 @@ type PowerVSServer struct {
 	stopOnce sync.Once
 }
 
-func NewPowerVSServer(cfg hypervisor.Config, cloudCfg PowerVSConfig, workerNode podnetwork.WorkerNode, daemonPort string) hypervisor.Server {
+func NewPowerVCServer(cfg hypervisor.Config, cloudCfg PowerVCConfig, workerNode podnetwork.WorkerNode, daemonPort string) hypervisor.Server {
 
 	logger.Printf("hypervisor config %v", cfg)
-	logger.Printf("cloud config %v", cloudCfg.Redact())
+	// logger.Printf("cloud config %v", cloudCfg.Redact())
 
-	powervs, err := NewPowervsService(cloudCfg.ApiKey, cloudCfg.ServiceInstanceID, cloudCfg.Zone)
+	powervc, err := NewPowerVCService()
 	if err != nil {
 		panic(err)
 	}
-	s := &PowerVSServer{
+
+	s := &PowerVCServer{
 		socketPath: cfg.SocketPath,
-		service:    newPowerVSService(powervs, &cloudCfg, &cfg, workerNode, cfg.PodsDir, daemonPort),
+		service:    newPowerVCService(powervc, &cloudCfg, &cfg, workerNode, cfg.PodsDir, daemonPort),
 		workerNode: workerNode,
 		readyCh:    make(chan struct{}),
 		stopCh:     make(chan struct{}),
 	}
-
 	return s
 }
 
-func (s *PowerVSServer) Start(ctx context.Context) (err error) {
+func (s *PowerVCServer) Start(ctx context.Context) (err error) {
 
 	ttRpc, err := ttrpc.NewServer()
 	if err != nil {
@@ -99,13 +99,13 @@ func (s *PowerVSServer) Start(ctx context.Context) (err error) {
 	return err
 }
 
-func (s *PowerVSServer) Shutdown() error {
+func (s *PowerVCServer) Shutdown() error {
 	s.stopOnce.Do(func() {
 		close(s.stopCh)
 	})
 	return nil
 }
 
-func (s *PowerVSServer) Ready() chan struct{} {
+func (s *PowerVCServer) Ready() chan struct{} {
 	return s.readyCh
 }

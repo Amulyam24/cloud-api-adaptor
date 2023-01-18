@@ -13,6 +13,6 @@ func newServer(cfg hypervisor.Config, cloudConfig interface{}, workerNode podnet
 	if cfg.HypProvider == "ibmcloud-vpc" {
 		return ibmcloud.NewVPCServer(cfg, cloudConfig.(ibmcloud.VpcConfig), workerNode, daemonPort)
 	} else {
-		return ibmcloud.NewPowerVSServer(cfg, cloudConfig.(ibmcloud.PowerVSConfig), workerNode, daemonPort)
+		return ibmcloud.NewPowerVCServer(cfg, cloudConfig.(ibmcloud.PowerVCConfig), workerNode, daemonPort)
 	}
 }

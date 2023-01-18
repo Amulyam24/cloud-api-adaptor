@@ -38,7 +38,7 @@ const DefaultShimTimeout = "60s"
 
 var vspherecfg vsphere.Config
 var ibmvpccfg ibmcloud.VpcConfig
-var ibmpvscfg ibmcloud.PowerVSConfig
+var ibmpvccfg ibmcloud.PowerVCConfig
 var awscfg aws.Config
 var azurecfg azure.Config
 var libvirtcfg libvirt.Config
@@ -131,17 +131,15 @@ func (cfg *daemonConfig) Setup() (cmd.Starter, error) {
 		})
 		defaultToEnv(&ibmvpccfg.ApiKey, "IBMCLOUD_API_KEY")
 
-	case "ibmcloud-powervs":
-		cmd.Parse("ibmcloud-powervs", os.Args[1:], func(flags *flag.FlagSet) {
-			flags.StringVar(&ibmpvscfg.ApiKey, "api-key", "", "IBM Cloud API key")
-			flags.StringVar(&ibmpvscfg.Zone, "zone", "", "PowerVS zone")
-			flags.StringVar(&ibmpvscfg.ServiceInstanceID, "service-instance-id", "", "ID of the PowerVS Service Instance")
-			flags.StringVar(&ibmpvscfg.NetworkID, "network-id", "", "ID of the network instance")
-			flags.StringVar(&ibmpvscfg.ImageID, "image-id", "", "ID of the boot image")
-			flags.StringVar(&ibmpvscfg.SSHKey, "ssh-key", "", "Name of the SSH Key")
+	case "ibmcloud-powervc":
+		cmd.Parse("ibmcloud-powervc", os.Args[1:], func(flags *flag.FlagSet) {
+			flags.StringVar(&ibmpvccfg.NetworkID, "network-id", "", "ID of the network instance")
+			flags.StringVar(&ibmpvccfg.ImageID, "image-id", "", "ID of the boot image")
+			flags.StringVar(&ibmpvccfg.SSHKey, "ssh-key", "", "Name of the SSH Key")
+			flags.StringVar(&ibmpvccfg.FlavorID, "flavor-id", "", "ID of the VM flavor to be used")
 			flags.StringVar(&hypcfg.SocketPath, "socket", hypervisor.DefaultSocketPath, "Unix domain socket path of remote hypervisor service")
 			flags.StringVar(&hypcfg.PodsDir, "pods-dir", hypervisor.DefaultPodsDir, "base directory for pod directories")
-			flags.StringVar(&hypcfg.HypProvider, "provider", "ibmcloud-powervs", "Hypervisor provider")
+			flags.StringVar(&hypcfg.HypProvider, "provider", "ibmcloud-powervc", "Hypervisor provider")
 			flags.StringVar(&cfg.TunnelType, "tunnel-type", podnetwork.DefaultTunnelType, "Tunnel provider")
 			flags.StringVar(&cfg.HostInterface, "host-interface", "", "Host Interface")
 			flags.StringVar(&hypcfg.CriSocketPath, "cri-runtime-endpoint", "", "cri runtime uds endpoint")
@@ -149,7 +147,6 @@ func (cfg *daemonConfig) Setup() (cmd.Starter, error) {
 			flags.IntVar(&cfg.VXLANPort, "vxlan-port", vxlan.DefaultVXLANPort, "VXLAN UDP port number (VXLAN tunnel mode only")
 			flags.IntVar(&cfg.VXLANMinID, "vxlan-min-id", vxlan.DefaultVXLANMinID, "Minimum VXLAN ID (VXLAN tunnel mode only")
 		})
-		defaultToEnv(&ibmpvscfg.ApiKey, "IBMCLOUD_API_KEY")
 
 	case "libvirt":
 		cmd.Parse("libvirt", os.Args[1:], func(flags *flag.FlagSet) {
@@ -210,8 +207,8 @@ func (cfg *daemonConfig) Setup() (cmd.Starter, error) {
 
 	if hypcfg.HypProvider == "ibmcloud-vpc" {
 		hypervisorServer = registry.NewServer(hypcfg, ibmvpccfg, workerNode, daemon.DefaultListenPort)
-	} else if hypcfg.HypProvider == "ibmcloud-powervs" {
-		hypervisorServer = registry.NewServer(hypcfg, ibmpvscfg, workerNode, daemon.DefaultListenPort)
+	} else if hypcfg.HypProvider == "ibmcloud-powervc" {
+		hypervisorServer = registry.NewServer(hypcfg, ibmpvccfg, workerNode, daemon.DefaultListenPort)
 	} else if hypcfg.HypProvider == "aws" {
 		hypervisorServer = registry.NewServer(hypcfg, awscfg, workerNode, daemon.DefaultListenPort)
 	} else if hypcfg.HypProvider == "libvirt" {

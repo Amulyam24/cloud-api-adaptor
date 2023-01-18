@@ -7,9 +7,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.1.0
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute/v3 v3.0.1
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork v1.1.0
-	github.com/IBM-Cloud/power-go-client v1.1.12
 	github.com/IBM/go-sdk-core/v5 v5.10.2
-	github.com/IBM/platform-services-go-sdk v0.28.2
 	github.com/IBM/vpc-go-sdk v1.0.1
 	github.com/aws/aws-sdk-go-v2 v1.16.5
 	github.com/aws/aws-sdk-go-v2/config v1.15.11
@@ -22,12 +20,14 @@ require (
 	github.com/coreos/go-iptables v0.6.0
 	github.com/gogo/protobuf v1.3.2
 	github.com/google/uuid v1.3.0
+	github.com/gophercloud/gophercloud v1.1.1
+	github.com/gophercloud/utils v0.0.0-20221207145018-e8fba78967ca
 	github.com/opencontainers/runtime-spec v1.0.3-0.20211214071223-8958f93039ab
 	github.com/stretchr/testify v1.8.1
 	github.com/vishvananda/netlink v1.1.1-0.20220115184804-dd687eb2f2d4
 	github.com/vishvananda/netns v0.0.0-20210104183010-2eb08e3e575f
 	github.com/vmware/govmomi v0.29.0
-	golang.org/x/sys v0.0.0-20220722155257-8c9f86f7a55f
+	golang.org/x/sys v0.2.0
 	google.golang.org/grpc v1.47.0
 	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/cri-api v0.23.1
@@ -39,13 +39,12 @@ require (
 	github.com/avast/retry-go/v4 v4.3.2
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.12.6
 	github.com/kata-containers/kata-containers/src/runtime v0.0.0-20220913141151-9b49a6ddc6fd
+	k8s.io/klog v1.0.0
 )
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.0.0 // indirect
 	github.com/AzureAD/microsoft-authentication-library-for-go v0.5.1 // indirect
-	github.com/PuerkitoBio/purell v1.1.1 // indirect
-	github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.1.12 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.4.6 // indirect
@@ -55,16 +54,8 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.16.7 // indirect
 	github.com/aws/smithy-go v1.11.3 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/go-openapi/analysis v0.21.2 // indirect
 	github.com/go-openapi/errors v0.20.2 // indirect
-	github.com/go-openapi/jsonpointer v0.19.5 // indirect
-	github.com/go-openapi/jsonreference v0.19.6 // indirect
-	github.com/go-openapi/loads v0.21.1 // indirect
-	github.com/go-openapi/runtime v0.23.0 // indirect
-	github.com/go-openapi/spec v0.20.4 // indirect
 	github.com/go-openapi/strfmt v0.21.3 // indirect
-	github.com/go-openapi/swag v0.21.1 // indirect
-	github.com/go-openapi/validate v0.22.0 // indirect
 	github.com/go-playground/locales v0.14.0 // indirect
 	github.com/go-playground/universal-translator v0.18.0 // indirect
 	github.com/golang-jwt/jwt v3.2.1+incompatible // indirect
@@ -72,20 +63,18 @@ require (
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.1 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
-	github.com/josharian/intern v1.0.0 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/leodido/go-urn v1.2.1 // indirect
-	github.com/mailru/easyjson v0.7.7 // indirect
+	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/oklog/ulid v1.3.1 // indirect
-	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/pkg/browser v0.0.0-20210911075715-681adbf594b8 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/sirupsen/logrus v1.9.0 // indirect
 	go.mongodb.org/mongo-driver v1.10.0 // indirect
-	golang.org/x/crypto v0.0.0-20220622213112-05595931fe9d // indirect
+	golang.org/x/crypto v0.0.0-20220829220503-c86fa9a7ed90 // indirect
 	golang.org/x/net v0.0.0-20220722155237-a158d28d115b // indirect
-	golang.org/x/text v0.3.7 // indirect
+	golang.org/x/text v0.4.0 // indirect
 	google.golang.org/genproto v0.0.0-20220624142145-8cd45d7dbd1f // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
 	gopkg.in/go-playground/validator.v9 v9.31.0 // indirect

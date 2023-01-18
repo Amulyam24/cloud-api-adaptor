@@ -25,7 +25,7 @@ import (
 const (
 	SocketName = "agent.ttrpc"
 
-	defaultMaxRetries    = 50
+	defaultMaxRetries    = 100
 	defaultRetryInterval = 10 * time.Second
 )
 

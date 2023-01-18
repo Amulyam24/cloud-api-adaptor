@@ -6,7 +6,6 @@ package ibmcloud
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,9 +16,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/IBM-Cloud/power-go-client/power/models"
-	"github.com/IBM/go-sdk-core/v5/core"
-
 	"github.com/confidential-containers/cloud-api-adaptor/pkg/adaptor/hypervisor"
 	"github.com/confidential-containers/cloud-api-adaptor/pkg/adaptor/proxy"
 	daemon "github.com/confidential-containers/cloud-api-adaptor/pkg/forwarder"
@@ -27,13 +23,16 @@ import (
 	"github.com/confidential-containers/cloud-api-adaptor/pkg/util/cloudinit"
 	"github.com/confidential-containers/cloud-api-adaptor/pkg/util/hvutil"
 	"github.com/containerd/containerd/pkg/cri/annotations"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
 
 	pb "github.com/kata-containers/kata-containers/src/runtime/protocols/hypervisor"
 )
 
+var sshkey string = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCe+JjMy8um0INxd/cMm0XAH2Kw/MOmYoTylHkOQdaNVX0Wcu9vVF4PMDFcsGGM9bhagyh9uVViHE2GzWXRM1MUKBfszgxn+R2Mai0fYKKlpPRJUp1M51xb9h8e+VI+lkp63mTpJcd4ZLkOpwBkGli2tteoJuQEtEvSuynoV7g63MwbZeBD2teYrxBR+yqExgiGrXZS3wQEGC7AD+4gMdCPemBoAc7YGJmnhXNHsniRDYIN3QWXwPSBsa5nqeBlGVsIhPhLUNJQmiIppKjPMYOeSJFdo0/SdVNk8NS40g4YutPKaZ3/GqwXsJzcwS5g9IyWw6FSN93zGzcNoA5Linoz9gL6xbRnx4NU9hb4wxzUtkA9y7wCALp0xegkSao/JZNRlcOYFvcYUKmSzFgqTIVO4iuMeRqruNBkbpRVX+hrwrhuYcZ4cu96o0ZBiFz7SgtQKrtwggvTp75n4Zr5HUoSr2cMQzclp2SyPvTmkqyJrBRzCL1KD+6QZ4nZ0V5emUs= amulyameka@Amulyas-MacBook-Pro.local"
+
 type hypervisorPVSService struct {
-	powervsService   PowerVS
-	serviceConfig    *PowerVSConfig
+	powervcService   PowerVC
+	serviceConfig    *PowerVCConfig
 	hypervisorConfig *hypervisor.Config
 	sandboxes        map[sandboxID]*sandbox
 	podsDir          string
@@ -45,9 +44,9 @@ type hypervisorPVSService struct {
 
 const maxInstanceNameLength = 45
 
-func newPowerVSService(powervs PowerVS, config *PowerVSConfig, hypervisorConfig *hypervisor.Config, workerNode podnetwork.WorkerNode, podsDir, daemonPort string) pb.HypervisorService {
+func newPowerVCService(powervc PowerVC, config *PowerVCConfig, hypervisorConfig *hypervisor.Config, workerNode podnetwork.WorkerNode, podsDir, daemonPort string) pb.HypervisorService {
 
-	logger.Printf("service config %v", config.Redact())
+	//logger.Printf("service config %v", config.Redact())
 
 	hostname, err := os.Hostname()
 	if err != nil {
@@ -60,7 +59,7 @@ func newPowerVSService(powervs PowerVS, config *PowerVSConfig, hypervisorConfig 
 	}
 
 	return &hypervisorPVSService{
-		powervsService:   powervs,
+		powervcService:   powervc,
 		serviceConfig:    config,
 		hypervisorConfig: hypervisorConfig,
 		sandboxes:        map[sandboxID]*sandbox{},
@@ -167,45 +166,55 @@ func (s *hypervisorPVSService) StartVM(ctx context.Context, req *pb.StartVMReque
 	if err != nil {
 		return nil, err
 	}
-	body := &models.PVMInstanceCreate{
-		ServerName:  &vmName,
-		ImageID:     &s.serviceConfig.ImageID,
-		KeyPairName: s.serviceConfig.SSHKey,
-		Networks: []*models.PVMInstanceAddNetwork{
+	body := servers.CreateOpts{
+		Name:      vmName,
+		ImageRef:  s.serviceConfig.ImageID,
+		FlavorRef: s.serviceConfig.FlavorID,
+		Networks: []servers.Network{
 			{
-				NetworkID: &s.serviceConfig.NetworkID,
-			}},
-		Memory:     core.Float64Ptr(4),
-		Processors: core.Float64Ptr(0.25),
-		ProcType:   core.StringPtr("shared"),
-		SysType:    "s922",
-		UserData:   base64.StdEncoding.EncodeToString([]byte(userData)),
+				UUID: s.serviceConfig.NetworkID,
+			},
+		},
+		UserData: []byte(userData),
+		Personality: servers.Personality{
+			&servers.File{
+				Path:     "/root/.ssh/authorized_keys",
+				Contents: []byte(sshkey),
+			},
+		},
 	}
 
-	response, err := s.powervsService.CreateInstance(body)
+	server, err := s.powervcService.CreateVM(body)
 	if err != nil {
 		logger.Printf("failed to create an instance : %v", err)
 		return nil, err
 	}
 
-	ins := (*response)[0]
-	sandbox.vsi = *ins.PvmInstanceID
-	vmState := ins.Status
-
-	logger.Printf("created an instance %s for sandbox %s", *ins.ServerName, req.Id)
+	logger.Printf("created an instance %s for sandbox %s", server.Name, req.Id)
 	var podNodeIPs []net.IP
 
-	for *vmState != "ACTIVE" {
-		in, err := s.powervsService.Get(*ins.PvmInstanceID)
+	vmState := server.Status
+
+	for vmState != "ACTIVE" {
+		vm, err := s.powervcService.GetVM(server.ID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get the instance: %w", err)
 		}
-		logger.Printf("Current VM state: %s", *vmState)
-		vmState = in.Status
-	}
-	logger.Printf("instance is in desired state: %s", *vmState)
 
-	podNodeIPs, err = getVMIPs(ins, s.powervsService)
+		if vmState == "ERROR" {
+			return nil, fmt.Errorf("instance in error state")
+		}
+		logger.Printf("Current VM state: %s", vmState)
+		vmState = vm.Status
+	}
+	logger.Printf("instance is in desired state: %s", vmState)
+
+	networkName, err := s.powervcService.GetNewtork(s.serviceConfig.NetworkID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get the network name: %w", err)
+	}
+
+	podNodeIPs, err = getVMIPs(server.ID, *networkName, s.powervcService)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get IPs for the instance : %w", err)
 	}
@@ -271,30 +280,46 @@ func (s *hypervisorPVSService) deleteSandbox(id string) error {
 	return nil
 }
 
-func getVMIPs(instance *models.PVMInstance, service PowerVS) ([]net.IP, error) {
+func getVMIPs(id string, networkName string, service PowerVC) ([]net.IP, error) {
 	var podNodeIPs []net.IP
-	in, err := service.Get(*instance.PvmInstanceID)
+	logger.Printf("entered get vm ips")
+	vm, err := service.GetVM(id)
 	if err != nil {
-		fmt.Println("failed to get the instance: %w", err)
+		return nil, fmt.Errorf("failed to get the instance: %w", err)
 	}
-	for i, nic := range in.Networks {
+	logger.Printf("fetched vm")
+	fmt.Println(vm)
 
-		addr := &nic.IPAddress
-		ip := net.ParseIP(*addr)
-		if ip == nil {
-			return nil, fmt.Errorf("failed to parse pod node IP %q", *addr)
+	if vm.Addresses == nil {
+		return nil, fmt.Errorf("address is nil for vm %s", vm.Name)
+	}
+	logger.Printf("address is present")
+
+	_, ok := vm.Addresses[networkName]
+	if !ok {
+		return nil, fmt.Errorf("failed to get network name for %s", vm.Name)
+	}
+
+	for i, networkAddresses := range vm.Addresses[networkName].([]interface{}) {
+		address := networkAddresses.(map[string]interface{})
+		if address["OS-EXT-IPS:type"] == "fixed" {
+			if address["version"].(float64) == 4 {
+				addr := address["addr"].(string)
+				ip := net.ParseIP(addr)
+				if ip == nil {
+					return nil, fmt.Errorf("failed to parse pod node IP %q", addr)
+				}
+				podNodeIPs = append(podNodeIPs, ip)
+				logger.Printf("podNodeIP[%d]=%s", i, ip.String())
+			}
 		}
-
-		podNodeIPs = append(podNodeIPs, ip)
-		logger.Printf("podNodeIP[%d]=%s", i, ip.String())
 	}
-
 	return podNodeIPs, nil
 }
 
 func (s *hypervisorPVSService) deleteInstance(ctx context.Context, id string) error {
 
-	err := s.powervsService.DeleteInstance(id)
+	err := s.powervcService.DeleteVM(id)
 	if err != nil {
 		logger.Printf("failed to delete an instance: %v", err)
 		return err
