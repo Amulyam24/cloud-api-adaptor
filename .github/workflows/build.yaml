@@ -17,6 +17,7 @@ jobs:
           - aws
           - azure
           - ibmcloud
+          - ibmcloud-powervs
           - libvirt
           - vsphere
         runner:
