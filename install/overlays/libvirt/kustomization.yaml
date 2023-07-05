@@ -1,7 +1,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-bases:
+resources:
 - ../../yamls
 
 images:
@@ -50,8 +50,8 @@ secretGenerator:
 #  - <path_to_client.key> # set - path to client.key
 ##TLS_SETTINGS
 
-patchesStrategicMerge:
-  #- cri_runtime_endpoint.yaml # set (modify host's runtime cri socket path in the file, default is /run/containerd/containerd.sock)
+patches:
+  #- path: cri_runtime_endpoint.yaml # set (modify host's runtime cri socket path in the file, default is /run/containerd/containerd.sock)
 ##TLS_SETTINGS
-  #- tls_certs_volume_mount.yaml # set (for tls)
+  #- path: tls_certs_volume_mount.yaml # set (for tls)
 ##TLS_SETTINGS
