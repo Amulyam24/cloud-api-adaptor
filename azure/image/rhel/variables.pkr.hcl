@@ -118,3 +118,8 @@ variable "az_gallery_image_version" {
   type    = string
   default = ""
 }
+
+variable "forwarder_port" {
+  type    = string
+  default = env("FORWARDER_PORT")
+}

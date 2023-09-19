@@ -7,6 +7,12 @@ PODVM_DIR=${REPO_ROOT}/podvm
 
 sudo mkdir -p /etc/containers
 sudo cp ${PODVM_DIR}/files/etc/agent-config.toml /etc/agent-config.toml
+
+if [ -n "${FORWARDER_PORT}" ]; then
+       cat <<END >> /etc/default/agent-protocol-forwarder 
+OPTIONS=-listen ${FORWARDER_ADDRESS}:${FORWARDER_PORT}
+END
+fi
 sudo cp -a ${PODVM_DIR}/files/etc/containers/* /etc/containers/
 sudo cp -a ${PODVM_DIR}/files/etc/systemd/* /etc/systemd/
 if [ -e ${PODVM_DIR}/files/etc/aa-offline_fs_kbc-resources.json ]; then

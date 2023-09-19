@@ -48,3 +48,7 @@ variable "disable_cloud_config" {
   default = env("DISABLE_CLOUD_CONFIG")
 }
 
+variable "forwarder_port" {
+  type    = string
+  default = env("FORWARDER_PORT")
+}

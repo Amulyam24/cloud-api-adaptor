@@ -37,7 +37,7 @@ cd cloud-api-adaptor/ibmcloud-powervs/image
 make build
 ```
 
-> If you intend to use DHCP network type for creating peer pod VMs with
+> 1. If you intend to use DHCP network type for creating peer pod VMs with
 > PowerVS provider, you need to additionally add this to `image-prep.template`
 > ```
 > mkdir -p /etc/cloud/cloud.cfg.d
@@ -45,6 +45,8 @@ make build
 > network: {config: disabled}
 > EOF
 > ```
+> 2. To use a specific port for agent-protocol-forwarder, pass `FORWARDER_PORT=<port-number>` to the `make`
+> command.
 
 2. Download the qcow2 image and converts into ova type
 ```
