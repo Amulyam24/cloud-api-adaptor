@@ -137,6 +137,21 @@ libvirt() {
         -socket /run/peerpod/hypervisor.sock
 }
 
+openstack() {
+
+    [[ "${OPENSTACK_SSH_KEY_NAME}" ]] && optionals+="-ssh-key ${OPENSTACK_SSH_KEY_NAME} "
+    [[ "${OPENSTACK_HOST_GROUP}" ]] && optionals+="-host-group ${OPENSTACK_HOST_GROUP} "
+
+    set -x
+    exec cloud-api-adaptor openstack \
+        -flavor-id ${OPENSTACK_FLAVOR_ID} \
+        -image-id ${OPENSTACK_IMAGE_ID} \
+        -network-id ${OPENSTACK_NETWORK_ID} \
+        -pods-dir /run/peerpod/pods \
+        ${optionals} \
+        -socket /run/peerpod/hypervisor.sock
+}
+
 vsphere() {
     test_vars GOVC_USERNAME GOVC_PASSWORD GOVC_URL GOVC_DATACENTER
 
@@ -160,7 +175,7 @@ help_msg() {
 Usage:
 	CLOUD_PROVIDER=aws|azure|ibmcloud|ibmcloud-powervs|libvirt|vsphere $0
 or
-	$0 aws|azure|ibmcloud|ibmcloud-powervs|libvirt|vsphere
+	$0 aws|azure|ibmcloud|ibmcloud-powervs|libvirt|openstack|vsphere
 in addition all cloud provider specific env variables must be set and valid
 (CLOUD_PROVIDER is currently set to "$CLOUD_PROVIDER")
 EOF
@@ -176,6 +191,8 @@ elif [[ "$CLOUD_PROVIDER" == "ibmcloud-powervs" ]]; then
     ibmcloud_powervs
 elif [[ "$CLOUD_PROVIDER" == "libvirt" ]]; then
     libvirt
+elif [[ "$CLOUD_PROVIDER" == "openstack" ]]; then
+    openstack
 elif [[ "$CLOUD_PROVIDER" == "vsphere" ]]; then
     vsphere
 else

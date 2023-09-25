@@ -25,7 +25,7 @@ RESOURCE_CTRL ?= false
 ifeq ($(RELEASE_BUILD),true)
 	BUILTIN_CLOUD_PROVIDERS ?= aws azure ibmcloud vsphere
 else
-	BUILTIN_CLOUD_PROVIDERS ?= aws azure ibmcloud vsphere libvirt
+	BUILTIN_CLOUD_PROVIDERS ?= aws azure ibmcloud openstack vsphere
 endif
 
 all: build

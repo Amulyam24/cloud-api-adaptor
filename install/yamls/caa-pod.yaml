@@ -28,8 +28,8 @@ spec:
             fieldRef:
               fieldPath: spec.nodeName
         envFrom:
-        - secretRef:
-            name: peer-pods-secret
+        # - secretRef:
+        #     name: peer-pods-secret
         - configMapRef:
             name: peer-pods-cm
         image: cloud-api-adaptor
@@ -59,6 +59,8 @@ spec:
         - mountPath: /run/netns
           mountPropagation: HostToContainer
           name: netns
+        - mountPath: /etc/openstack
+          name: cloud-config
       hostNetwork: true
       nodeSelector:
         node.kubernetes.io/worker: ""
@@ -67,6 +69,9 @@ spec:
         secret:
           secretName: auth-json-secret
           optional: true # failing?
+      - name: cloud-config
+        configMap:
+          name: cloud-config
       - name: ssh
         secret:
           defaultMode: 384

@@ -1,0 +1,12 @@
+clouds:
+  insecure:
+    auth:
+      auth_url:
+      project_name: ""
+      domain_name: "Default"
+      username: ""
+      password: ""
+    region_name: "RegionOne"
+    interface: "public"
+    identity_api_version: 3
+    verify: False
