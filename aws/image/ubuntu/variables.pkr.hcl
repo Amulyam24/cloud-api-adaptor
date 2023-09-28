@@ -53,3 +53,8 @@ variable "forwarder_port" {
   default = env("FORWARDER_PORT")
 }
 
+variable "forwarder_address" {
+  type    = string
+  default = env("FORWARDER_ADDRESS")
+}
+

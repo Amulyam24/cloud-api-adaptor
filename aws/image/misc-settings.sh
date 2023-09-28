@@ -99,9 +99,9 @@ ExecStartPre=
 END
 fi
 
-if [ -n "${FORWARDER_PORT}" ]; then
+if [ "${FORWARDER_PORT}" != "15150" ] || [ "${FORWARDER_ADDRESS}" != "0.0.0.0" ]; then
     cat <<END >> /etc/default/agent-protocol-forwarder 
-OPTIONS=-listen ${FORWARDER_ADDRESS}:${FORWARDER_PORT}
+OPTIONS=-listen ${FORWARD_LISTEN}
 END
 fi
 

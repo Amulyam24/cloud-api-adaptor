@@ -29,8 +29,9 @@ LIBC        ?= $(if $(filter $(ARCH),s390x ppc64le),gnu,musl)
 RUST_ARCH   ?= $(subst ppc64le,powerpc64le,$(ARCH))
 RUST_TARGET := $(RUST_ARCH)-unknown-linux-$(LIBC)
 
-export FORWARDER_PORT ?=
-export FORWARDER_ADDRESS := 0.0.0.0
+FORWARDER_PORT ?= 15150
+FORWARDER_ADDRESS ?= 0.0.0.0
+export FORWARD_LISTEN=$(FORWARDER_ADDRESS):$(FORWARDER_PORT)
 
 ifneq ($(HOST_ARCH),$(ARCH))
     ifeq ($(CC),cc)

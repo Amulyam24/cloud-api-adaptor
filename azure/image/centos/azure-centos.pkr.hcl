@@ -87,7 +87,8 @@ build {
       "CLOUD_PROVIDER=${var.cloud_provider}",
       "PODVM_DISTRO=${var.podvm_distro}",
       "DISABLE_CLOUD_CONFIG=${var.disable_cloud_config}",
-      "FORWARDER_PORT=${var.forwarder_port}"
+      "FORWARDER_PORT=${var.forwarder_port}",
+      "FORWARDER_ADDRESS=${var.forwarder_address}"
     ]
     inline = [
       "sudo -E bash ~/misc-settings.sh"
