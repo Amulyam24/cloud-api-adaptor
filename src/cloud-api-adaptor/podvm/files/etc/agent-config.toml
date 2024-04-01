@@ -7,7 +7,7 @@ server_addr="unix:///run/kata-containers/agent.sock"
 
 # This field sets up the KBC that attestation agent uses
 # This is replaced in the makefile steps so do not set it manually
-aa_kbc_params = ""
+# aa_kbc_params = ""
 
 # temp workaround for kata-containers/kata-containers#5590
 [endpoints]
