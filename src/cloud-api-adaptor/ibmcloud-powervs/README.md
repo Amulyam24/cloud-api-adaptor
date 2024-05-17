@@ -30,11 +30,17 @@ pvsadm image qcow2ova --prep-template-default > image-prep.template
 
 Add the following snippet to `image-prep.template`
 ```
-yum install -y gcc gcc-c++ git make
-git clone -b CCv0 https://github.com/kata-containers/kata-containers.git
-git clone https://github.com/confidential-containers/cloud-api-adaptor.git
-cd cloud-api-adaptor/ibmcloud-powervs/image
-make build
+yum install -y gcc gcc-c++ git make wget
+wget https://github.com/mikefarah/yq/releases/download/v4.42.1/yq_linux_ppc64le
+chmod +x yq_linux_ppc64le && mv yq_linux_ppc64le /usr/local/bin/yq
+
+mkdir -p  /root/go/src/github.com
+export GOPATH=/root/go
+cd /root/go/src/github.com
+
+git clone  https://github.com/Amulyam24/cloud-api-adaptor.git
+cd cloud-api-adaptor/src/cloud-api-adaptor/ibmcloud-powervs/image
+AGENT_POLICY=no SEALED_SECRET=no FORWARDER_PORT=2005 make build
 ```
 
 > NOTE: 
