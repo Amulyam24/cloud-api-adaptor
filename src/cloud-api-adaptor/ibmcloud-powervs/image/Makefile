@@ -12,10 +12,15 @@ include $(ROOT_DIR)podvm/Makefile.inc
 
 export PATH := $(PATH):/usr/local/go/bin:$(HOME)/.cargo/bin
 
+BINARIES = \
+        $(AGENT_PROTOCOL_FORWARDER) \
+        $(KATA_AGENT) \
+        $(PAUSE) \
+
 .PHONY: build clean
 
 prerequisites: ## Install dependencies
-	./prereq.sh
+	bash -x ./prereq.sh
 
 build: prerequisites $(BINARIES)
 	./copy-files.sh
