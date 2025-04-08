@@ -39,7 +39,7 @@ DEFAULT_AGENT_POLICY_FILE ?= allow-all.rego
 VERIFY_PROVENANCE ?= no
 #GUEST_COMPONENTS_REPO := confidential-containers/guest-components
 KATA_REPO := kata-containers/kata-containers
-GUEST_COMPONENTS_REPO := https://github.com/confidential-containers/guest-components
+GUEST_COMPONENTS_REPO := https://github.com/Amulyam24/guest-components
 
 # probe version if the ref does not appear to be a git commit digest
 ifeq ($(shell echo $(GUEST_COMPONENTS_REF) | grep -E "[0-9a-f]{40}"),)
@@ -99,6 +99,8 @@ PROCESS_USER_DATA = $(FILES_DIR)/usr/local/bin/process-user-data
 
 BINARIES ?= \
 	$(AGENT_PROTOCOL_FORWARDER) \
+	$(ATTESTATION_AGENT) \
+	$(CONFIDENTIAL_DATA_HUB) \
 	$(KATA_AGENT) \
 	$(PAUSE) \
 	$(PROCESS_USER_DATA)
@@ -206,16 +208,18 @@ $(PAUSE): | $(PAUSE_SRC) $(UMOCI_SRC)/umoci
 	$(UMOCI_SRC)/umoci unpack --rootless --image "$(PAUSE_SRC):$(PAUSE_VERSION)" "${FILES_DIR}/$(PAUSE_BUNDLE)"
 
 $(GUEST_COMPONENTS_SRC):
-	$(call git_clone_repo_ref,$(GUEST_COMPONENTS_REPO),$(GUEST_COMPONENTS_SRC),3df6c412059f29127715c3fdbac9fa41f56cfce4)
+	$(call git_clone_repo_ref,$(GUEST_COMPONENTS_REPO),$(GUEST_COMPONENTS_SRC),ppc64le)
 
 $(ATTESTATION_AGENT): $(FORCE_TARGET) | $(GUEST_COMPONENTS_SRC)
-	cd "$(GUEST_COMPONENTS_SRC)/attestation-agent" && CC= ARCH=$(ARCH) $(MAKE) TEE_PLATFORM=none ttrpc=true LIBC="$(LIBC)"
+	cd "$(GUEST_COMPONENTS_SRC)/attestation-agent/attestation-agent" && cargo build --release --no-default-features --features "coco_as,kbs bin,ttrpc,openssl" --bin ttrpc-aa --target powerpc64le-unknown-linux-gnu
 	mkdir -p "$(@D)"
+	mv "$(GUEST_COMPONENTS_SRC)/target/$(RUST_TARGET)/release/ttrpc-aa" "$(GUEST_COMPONENTS_SRC)/target/$(RUST_TARGET)/release/attestation-agent"
 	install --compare "$(GUEST_COMPONENTS_SRC)/target/$(RUST_TARGET)/release/attestation-agent" "$@"
 
 $(CONFIDENTIAL_DATA_HUB): $(FORCE_TARGET) | $(GUEST_COMPONENTS_SRC)
-	cd "$(GUEST_COMPONENTS_SRC)/confidential-data-hub" && CC= ARCH=$(ARCH) $(MAKE) TEE_PLATFORM=none LIBC="$(LIBC)"
+	cd "$(GUEST_COMPONENTS_SRC)/confidential-data-hub/hub" && cargo build --release --no-default-features --features "bin,ttrpc kbs aliyun,ehsm" --bin ttrpc-cdh --target powerpc64le-unknown-linux-gnu
 	mkdir -p "$(@D)"
+	mv "$(GUEST_COMPONENTS_SRC)/target/$(RUST_TARGET)/release/ttrpc-cdh" "$(GUEST_COMPONENTS_SRC)/target/$(RUST_TARGET)/release/confidential-data-hub"
 	install --compare "$(GUEST_COMPONENTS_SRC)/target/$(RUST_TARGET)/release/confidential-data-hub" "$@"
 
 $(API_SERVER_REST): $(FORCE_TARGET)

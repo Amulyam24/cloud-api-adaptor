@@ -50,7 +50,7 @@ func init() {
 		SilenceUsage: true, // Silence usage on error
 	}
 	provisionFilesCmd.Flags().IntVarP(&fetchTimeout, "user-data-fetch-timeout", "t", 180, "Timeout (in secs) for fetching user data")
-	provisionFilesCmd.Flags().StringVarP(&listenAddr, "listen", "l", "", "Listen address")
+	provisionFilesCmd.Flags().StringVar(&listenAddr, "listen", "", "Listen address")
 	rootCmd.AddCommand(provisionFilesCmd)
 }
 
