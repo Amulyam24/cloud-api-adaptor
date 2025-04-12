@@ -104,6 +104,7 @@ func (cfg *daemonConfig) Setup() (cmd.Starter, error) {
 		flags.StringVar(&cfg.serverConfig.PodsDir, "pods-dir", adaptor.DefaultPodsDir, "base directory for pod directories")
 		flags.StringVar(&cfg.serverConfig.PauseImage, "pause-image", "", "pause image to be used for the pods")
 		flags.StringVar(&cfg.serverConfig.ForwarderPort, "forwarder-port", daemon.DefaultListenPort, "port number of agent protocol forwarder")
+		flags.StringVar(&cfg.serverConfig.PudPort, "pud-port", "", "port number of process user data")
 		flags.StringVar(&tlsConfig.CAFile, "ca-cert-file", "", "CA cert file")
 		flags.StringVar(&tlsConfig.CertFile, "cert-file", "", "cert file")
 		flags.StringVar(&tlsConfig.KeyFile, "cert-key", "", "cert key")

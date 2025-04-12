@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log"
+	"net"
 	"net/netip"
 	"strconv"
 	"strings"
@@ -45,13 +46,44 @@ func NewProvider(config *Config) (provider.Provider, error) {
 	}, nil
 }
 
-func (p *ibmcloudPowerVSProvider) CreateInstance(ctx context.Context, podName, sandboxID string, cloudConfig cloudinit.CloudConfigGenerator, spec provider.InstanceTypeSpec) (*provider.Instance, error) {
+func (p *ibmcloudPowerVSProvider) CreateInstance(ctx context.Context, podName, sandboxID, pudPort string, cloudConfig cloudinit.CloudConfigGenerator, spec provider.InstanceTypeSpec) (*provider.Instance, error) {
 
 	instanceName := util.GenerateInstanceName(podName, sandboxID, maxInstanceNameLen)
 
 	userData, err := cloudConfig.Generate()
 	if err != nil {
 		return nil, err
+	}
+
+	if pudPort != "" {
+		// Check if pooling should be used and fetch a VM details from the pool
+		insID := "abcd"
+		instanceName := "peerpod-vm"
+		ips, err := p.getVMIPs(ctx, insID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get IPs for the instance : %v", err)
+		}
+
+		logger.Printf("Connecting to %s:%s", ips[0].String(), pudPort)
+		conn, err := net.Dial("tcp", ips[0].String()+":"+pudPort)
+		if err != nil {
+			return nil, err
+		}
+		defer conn.Close()
+
+		logger.Println("Connection established, prepare to send data..")
+		_, err = conn.Write([]byte(userData))
+		if err != nil {
+			return nil, err
+		}
+
+		logger.Println("user-data is sent")
+
+		return &provider.Instance{
+			ID:   insID,
+			Name: instanceName,
+			IPs:  ips,
+		}, nil
 	}
 
 	imageId := p.serviceConfig.ImageId

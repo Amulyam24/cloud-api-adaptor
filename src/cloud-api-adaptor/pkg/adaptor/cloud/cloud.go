@@ -51,6 +51,7 @@ type ServerConfig struct {
 	PauseImage              string
 	PodsDir                 string
 	ForwarderPort           string
+	PudPort                 string
 	ProxyTimeout            time.Duration
 	Initdata                string
 	EnableCloudConfigVerify bool
@@ -390,7 +391,7 @@ func (s *cloudService) StartVM(ctx context.Context, req *pb.StartVMRequest) (res
 		return nil, fmt.Errorf("getting sandbox: %w", err)
 	}
 
-	instance, err := s.provider.CreateInstance(ctx, sandbox.podName, string(sid), sandbox.cloudConfig, sandbox.spec)
+	instance, err := s.provider.CreateInstance(ctx, sandbox.podName, string(sid), s.serverConfig.PudPort, sandbox.cloudConfig, sandbox.spec)
 	if err != nil {
 		return nil, fmt.Errorf("creating an instance : %w", err)
 	}
