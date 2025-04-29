@@ -16,6 +16,12 @@ FILES_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))/files
 
 include $(ROOT_DIR)Makefile.defaults
 
+HOST_ARCH   := $(shell uname -m)
+ARCH        := $(or $(ARCH),$(HOST_ARCH))
+LIBC        ?= $(if $(filter $(ARCH),s390x ppc64le),gnu,musl)
+RUST_ARCH   ?= $(subst ppc64le,powerpc64le,$(ARCH))
+RUST_TARGET := $(RUST_ARCH)-unknown-linux-$(LIBC)
+
 IMAGE_PREFIX := podvm
 
 # Auth json file for registry access. Used with skopeo
@@ -31,8 +37,9 @@ DEFAULT_AGENT_POLICY_FILE ?= allow-all.rego
 
 # Run github artifact provenance verifications
 VERIFY_PROVENANCE ?= no
-GUEST_COMPONENTS_REPO := confidential-containers/guest-components
+#GUEST_COMPONENTS_REPO := confidential-containers/guest-components
 KATA_REPO := kata-containers/kata-containers
+GUEST_COMPONENTS_REPO := https://github.com/confidential-containers/guest-components
 
 # probe version if the ref does not appear to be a git commit digest
 ifeq ($(shell echo $(GUEST_COMPONENTS_REF) | grep -E "[0-9a-f]{40}"),)
@@ -92,15 +99,13 @@ PROCESS_USER_DATA = $(FILES_DIR)/usr/local/bin/process-user-data
 
 BINARIES ?= \
 	$(AGENT_PROTOCOL_FORWARDER) \
-	$(API_SERVER_REST) \
-	$(ATTESTATION_AGENT) \
-	$(CONFIDENTIAL_DATA_HUB) \
 	$(KATA_AGENT) \
 	$(PAUSE) \
 	$(PROCESS_USER_DATA)
 
 SKOPEO_SRC ?= skopeo
 SKOPEO_BIN ?= $(SKOPEO_SRC)/bin/skopeo
+GUEST_COMPONENTS_SRC = ../../../guest-components
 
 UMOCI_SRC   = umoci
 
@@ -200,15 +205,18 @@ $(PAUSE_SRC): $(SKOPEO_BIN)
 $(PAUSE): | $(PAUSE_SRC) $(UMOCI_SRC)/umoci
 	$(UMOCI_SRC)/umoci unpack --rootless --image "$(PAUSE_SRC):$(PAUSE_VERSION)" "${FILES_DIR}/$(PAUSE_BUNDLE)"
 
-$(ATTESTATION_AGENT): $(FORCE_TARGET)
-	$(call pull_gc_artifact,attestation-agent,$(TEE_PLATFORM)_$(ARCH))
-	tar xvJpf attestation-agent.tar.xz
-	install -D --compare attestation-agent "$@"
+$(GUEST_COMPONENTS_SRC):
+	$(call git_clone_repo_ref,$(GUEST_COMPONENTS_REPO),$(GUEST_COMPONENTS_SRC),3df6c412059f29127715c3fdbac9fa41f56cfce4)
 
-$(CONFIDENTIAL_DATA_HUB): $(FORCE_TARGET)
-	$(call pull_gc_artifact,confidential-data-hub,$(ARCH))
-	tar xvJpf confidential-data-hub.tar.xz
-	install -D --compare confidential-data-hub "$@"
+$(ATTESTATION_AGENT): $(FORCE_TARGET) | $(GUEST_COMPONENTS_SRC)
+	cd "$(GUEST_COMPONENTS_SRC)/attestation-agent" && CC= ARCH=$(ARCH) $(MAKE) TEE_PLATFORM=none ttrpc=true LIBC="$(LIBC)"
+	mkdir -p "$(@D)"
+	install --compare "$(GUEST_COMPONENTS_SRC)/target/$(RUST_TARGET)/release/attestation-agent" "$@"
+
+$(CONFIDENTIAL_DATA_HUB): $(FORCE_TARGET) | $(GUEST_COMPONENTS_SRC)
+	cd "$(GUEST_COMPONENTS_SRC)/confidential-data-hub" && CC= ARCH=$(ARCH) $(MAKE) TEE_PLATFORM=none LIBC="$(LIBC)"
+	mkdir -p "$(@D)"
+	install --compare "$(GUEST_COMPONENTS_SRC)/target/$(RUST_TARGET)/release/confidential-data-hub" "$@"
 
 $(API_SERVER_REST): $(FORCE_TARGET)
 	$(call pull_gc_artifact,api-server-rest,$(ARCH))
