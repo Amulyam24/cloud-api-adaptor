@@ -34,6 +34,7 @@ const (
 type daemonConfig struct {
 	serverConfig  cloud.ServerConfig
 	networkConfig tunneler.NetworkConfig
+	poolingConfig cloud.PoolingConfig
 }
 
 func printHelp(out io.Writer) {
@@ -119,6 +120,10 @@ func (cfg *daemonConfig) Setup() (cmd.Starter, error) {
 		flags.StringVar(&secureCommsPpOutbounds, "secure-comms-pp-outbounds", "", "PP Outbound tags for secure communication tunnels")
 		flags.StringVar(&secureCommsKbsAddr, "secure-comms-kbs", "kbs-service.trustee-operator-system:8080", "Address of a Trustee Service for Secure-Comms")
 		flags.DurationVar(&cfg.serverConfig.ProxyTimeout, "proxy-timeout", proxy.DefaultProxyTimeout, "Maximum timeout in minutes for establishing agent proxy connection")
+		flags.StringVar(&cfg.serverConfig.PudPort, "pud-port", "", "port number used to connect to process-user-data on the pod VM")
+		flags.BoolVar(&cfg.poolingConfig.UsePooling, "use-pooling", false, "Use pre-created VMs for pod creation")
+		flags.Var(&cfg.poolingConfig.IPs, "pool-ips", "list of IPs to be used")
+		flags.IntVar(&cfg.poolingConfig.PoolSize, "pool-size", 0, "Pool size of the pre-created pod VMs")
 
 		flags.StringVar(&cfg.networkConfig.TunnelType, "tunnel-type", podnetwork.DefaultTunnelType, "Tunnel provider")
 		flags.StringVar(&cfg.networkConfig.HostInterface, "host-interface", "", "Host Interface")
@@ -135,6 +140,7 @@ func (cfg *daemonConfig) Setup() (cmd.Starter, error) {
 	})
 
 	cmd.ShowVersion(programName)
+	fmt.Println("After parse: IPs =", cfg.poolingConfig.IPs)
 
 	fmt.Printf("%s: starting Cloud API Adaptor daemon for %q\n", programName, cloudName)
 
@@ -177,7 +183,7 @@ func (cfg *daemonConfig) Setup() (cmd.Starter, error) {
 		}
 	}
 
-	server := adaptor.NewServer(provider, &cfg.serverConfig, workerNode)
+	server := adaptor.NewServer(provider, &cfg.serverConfig, &cfg.poolingConfig, workerNode)
 
 	return cmd.NewStarter(server), nil
 }

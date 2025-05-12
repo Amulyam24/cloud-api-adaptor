@@ -6,7 +6,7 @@ set -o nounset
 
 script_dir=$(dirname "$(readlink -f "$0")")
 
-registry="${registry:-quay.io/confidential-containers}"
+registry="${registry:-docker.io/amulyam24}"
 name="cloud-api-adaptor"
 release_build=${RELEASE_BUILD:-false}
 version=${VERSION:-unknown}
@@ -20,7 +20,7 @@ fi
 dev_tags=${DEV_TAGS:-"latest,dev-${commit}"}
 release_tags=${RELEASE_TAGS:-"${commit}"}
 
-supported_arches=${ARCHES:-"linux/amd64"}
+supported_arches=${ARCHES:-"linux/ppc64le"}
 
 arch_file_prefix="${script_dir}/../tags-architectures-"
 arch_prefix="linux/"

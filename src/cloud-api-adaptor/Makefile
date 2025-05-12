@@ -27,7 +27,8 @@ RESOURCE_CTRL ?= true
 ifeq ($(RELEASE_BUILD),true)
 	BUILTIN_CLOUD_PROVIDERS ?= alibabacloud aws azure gcp ibmcloud ibmcloud_powervs vsphere
 else
-	BUILTIN_CLOUD_PROVIDERS ?= alibabacloud aws azure gcp ibmcloud ibmcloud_powervs vsphere libvirt docker
+	BUILTIN_CLOUD_PROVIDERS ?= ibmcloud_powervs
+#BUILTIN_CLOUD_PROVIDERS ?= alibabacloud aws azure gcp ibmcloud ibmcloud_powervs vsphere libvirt docker
 endif
 
 all: build

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -17,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	retry "github.com/avast/retry-go/v4"
 	"github.com/containerd/containerd/pkg/cri/annotations"
 	pb "github.com/kata-containers/kata-containers/src/runtime/protocols/hypervisor"
 
@@ -43,6 +45,7 @@ type ServerConfig struct {
 	PauseImage              string
 	PodsDir                 string
 	ForwarderPort           string
+	PudPort                 string
 	ProxyTimeout            time.Duration
 	Initdata                string
 	EnableCloudConfigVerify bool
@@ -94,7 +97,7 @@ func (s *cloudService) removeSandbox(id sandboxID) error {
 	return nil
 }
 
-func NewService(provider provider.Provider, proxyFactory proxy.Factory, workerNode podnetwork.WorkerNode,
+func NewService(cloudProvider provider.Provider, poolCfg *PoolingConfig, proxyFactory proxy.Factory, workerNode podnetwork.WorkerNode,
 	serverConfig *ServerConfig, sshport string) Service {
 	var err error
 	var sshClient *wnssh.SshClient
@@ -114,13 +117,20 @@ func NewService(provider provider.Provider, proxyFactory proxy.Factory, workerNo
 		}
 	}
 
+	poolCfg.PoolVMs = &provider.IPPool{
+		IPs: make(map[string]bool),
+	}
+
+	poolCfg.PreCreatedInstances = new([]provider.Instance)
+
 	s := &cloudService{
-		provider:     provider,
-		proxyFactory: proxyFactory,
-		sandboxes:    map[sandboxID]*sandbox{},
-		serverConfig: serverConfig,
-		workerNode:   workerNode,
-		sshClient:    sshClient,
+		provider:      cloudProvider,
+		proxyFactory:  proxyFactory,
+		sandboxes:     map[sandboxID]*sandbox{},
+		serverConfig:  serverConfig,
+		workerNode:    workerNode,
+		sshClient:     sshClient,
+		poolingConfig: poolCfg,
 	}
 	s.cond = sync.NewCond(&s.mutex)
 	s.ppService, err = k8sops.NewPeerPodService()
@@ -139,7 +149,88 @@ func (s *cloudService) ConfigVerifier() error {
 	return s.provider.ConfigVerifier()
 }
 
-func (s *cloudService) setInstance(sid sandboxID, instanceID, instanceName string) error {
+func (s *cloudService) InitialisePool() error {
+	logger.Println("Initialising the VM pool")
+	pool := s.poolingConfig.PoolVMs
+	s.poolingConfig.IPs = []string{"135.90.103.36,135.90.103.37"}
+	fmt.Println("IPS--", s.poolingConfig.IPs)
+	if len(s.poolingConfig.IPs) > 0 {
+		for _, ip := range s.poolingConfig.IPs {
+			pool.IPs[ip] = false
+		}
+		logger.Printf("VM pool: (%v)", pool.IPs)
+		return nil
+	} else {
+		if err := s.provider.InitialisePool(s.poolingConfig.PoolSize, s.poolingConfig.PoolVMs, s.poolingConfig.PreCreatedInstances); err != nil {
+			return err
+		}
+	}
+
+	// its this needed? when we are intitilising the pool ip to false in the provider
+	// if len(*s.poolingConfig.PreCreatedInstances) > 0 {
+	// 	for _, ins := range *s.poolingConfig.PreCreatedInstances {
+	// 		pool.IPs[ins.IPs[0].String()] = false
+	// 	}
+	// }
+
+	return nil
+}
+
+func (s *cloudService) DeletePool() error {
+	if len(*s.poolingConfig.PreCreatedInstances) > 0 {
+		return s.provider.DeletePool(s.poolingConfig.PreCreatedInstances)
+	}
+	logger.Println("Pool is not created by provider, hence skipping deletion")
+	return nil
+}
+
+func (s *cloudService) AllocateIP() (string, error) {
+	p := s.poolingConfig.PoolVMs
+	p.Mu.Lock()
+	defer p.Mu.Unlock()
+
+	for ip, inUse := range p.IPs {
+		if !inUse {
+			if len(*s.poolingConfig.PreCreatedInstances) > 0 {
+				for _, ins := range *s.poolingConfig.PreCreatedInstances {
+					if ip == ins.IPs[0].String() {
+						break
+					}
+				}
+			}
+			p.IPs[ip] = true
+			return ip, nil
+		}
+	}
+	return "", fmt.Errorf("No IPs available to lease")
+}
+
+func (s *cloudService) ReleaseIP(ip string) error {
+	p := s.poolingConfig.PoolVMs
+	p.Mu.Lock()
+	defer p.Mu.Unlock()
+	logger.Printf("VM pool: (%v)", p.IPs)
+	if _, exists := p.IPs[ip]; exists {
+		p.IPs[ip] = false
+		return nil
+	}
+
+	return fmt.Errorf("IP not found in pool")
+}
+
+func (s *cloudService) getInstanceIP(ctx context.Context, podNamespace, podName string) (string, error) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	for _, sandbox := range s.sandboxes {
+		if sandbox.podNamespace == podNamespace && sandbox.podName == podName {
+			return sandbox.ip, nil
+		}
+	}
+	return "", fmt.Errorf("failed to find ip for pod %s", podName)
+}
+
+func (s *cloudService) setInstance(sid sandboxID, instanceID, instanceName, ip string) error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -147,10 +238,13 @@ func (s *cloudService) setInstance(sid sandboxID, instanceID, instanceName strin
 	if !ok {
 		return fmt.Errorf("sandbox %s does not exist", sid)
 	}
+	if ip != "" {
+		sandbox.ip = ip
+	} else {
+		sandbox.instanceID = instanceID
+		sandbox.instanceName = instanceName
 
-	sandbox.instanceID = instanceID
-	sandbox.instanceName = instanceName
-
+	}
 	s.cond.Broadcast()
 
 	return nil
@@ -369,30 +463,89 @@ func (s *cloudService) StartVM(ctx context.Context, req *pb.StartVMRequest) (res
 	}()
 
 	sid := sandboxID(req.Id)
+	var instance *provider.Instance
+	var instanceIP string
 
 	sandbox, err := s.getSandbox(sid)
 	if err != nil {
 		return nil, fmt.Errorf("getting sandbox: %w", err)
 	}
 
-	instance, err := s.provider.CreateInstance(ctx, sandbox.podName, string(sid), sandbox.cloudConfig, sandbox.spec)
-	if err != nil {
-		return nil, fmt.Errorf("creating an instance : %w", err)
-	}
-
-	if s.ppService != nil {
-		if err := s.ppService.OwnPeerPod(sandbox.podName, sandbox.podNamespace, instance.ID); err != nil {
-			logger.Printf("failed to create PeerPod: %v", err)
+	// If UsePooling is set to true and IPs are present, use IP to connect to the instance to send user-data
+	var conn net.Conn
+	if s.poolingConfig.UsePooling {
+		instance = &provider.Instance{}
+		instanceIP, err = s.AllocateIP()
+		if err != nil {
+			return nil, err
 		}
+		logger.Printf("fetched IP %s from pool", instanceIP)
+
+		if instanceIP == "" {
+			return nil, fmt.Errorf("ip is empty")
+		}
+
+		userData, err := sandbox.cloudConfig.Generate()
+		if err != nil {
+			return nil, err
+		}
+
+		address := fmt.Sprintf("%s:%s", instanceIP, s.serverConfig.PudPort)
+		logger.Printf("Connecting to pre-created VM: %s", address)
+		ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+		defer cancel()
+
+		err = retry.Do(
+			func() error {
+				var err error
+				conn, err = (&net.Dialer{}).DialContext(ctx, "tcp", address)
+				return err
+			},
+			retry.Attempts(0),
+			retry.Context(ctx),
+			retry.MaxDelay(5*time.Second),
+		)
+		if err != nil {
+			err = fmt.Errorf("failed to establish connection to process-user-data: %s: %w", address, err)
+			logger.Print(err)
+			return nil, err
+		}
+		defer conn.Close()
+
+		logger.Println("Connection established, prepare to send data..")
+		_, err = conn.Write([]byte(userData))
+		if err != nil {
+			return nil, err
+		}
+		ip, err := netip.ParseAddr(instanceIP)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse IP %q: %w", instanceIP, err)
+		}
+		instance.IPs = append(instance.IPs, ip)
+		logger.Printf("Successfully sent user-data to the pre-created VM, IP:%s", instanceIP)
+
+		if err := s.setInstance(sid, "", "", ip.String()); err != nil {
+			return nil, fmt.Errorf("setting instance: %w", err)
+		}
+	} else {
+		instance, err = s.provider.CreateInstance(ctx, sandbox.podName, string(sid), sandbox.cloudConfig, sandbox.spec)
+		if err != nil {
+			return nil, fmt.Errorf("creating an instance : %w", err)
+		}
+
+		if s.ppService != nil {
+			if err := s.ppService.OwnPeerPod(sandbox.podName, sandbox.podNamespace, instance.ID); err != nil {
+				logger.Printf("failed to create PeerPod: %v", err)
+			}
+		}
+
+		if err := s.setInstance(sid, instance.ID, instance.Name, ""); err != nil {
+			return nil, fmt.Errorf("setting instance: %w", err)
+		}
+		instanceIP = instance.IPs[0].String()
+		logger.Printf("created an instance %s for sandbox %s", instance.Name, sid)
 	}
 
-	if err := s.setInstance(sid, instance.ID, instance.Name); err != nil {
-		return nil, fmt.Errorf("setting instance: %w", err)
-	}
-
-	logger.Printf("created an instance %s for sandbox %s", instance.Name, sid)
-
-	instanceIP := instance.IPs[0].String()
 	forwarderPort := s.serverConfig.ForwarderPort
 
 	if s.sshClient != nil {
@@ -460,6 +613,16 @@ func (s *cloudService) StopVM(ctx context.Context, req *pb.StopVMRequest) (*pb.S
 	if sandbox.sshClientInst != nil {
 		sandbox.sshClientInst.DisconnectPP(string(sid))
 	}
+
+	ip, err := s.getInstanceIP(ctx, sandbox.podNamespace, sandbox.podName)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.ReleaseIP(ip); err != nil {
+		return nil, err
+	}
+	logger.Printf("VM pool: (%v)", s.poolingConfig.PoolVMs.IPs)
 
 	if err := s.provider.DeleteInstance(ctx, sandbox.instanceID); err != nil {
 		logger.Printf("Error deleting an instance %s: %v", sandbox.instanceID, err)

@@ -6,6 +6,7 @@ package ibmcloud_powervs
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"log"
 	"net/netip"
@@ -106,6 +107,16 @@ func (p *ibmcloudPowerVSProvider) CreateInstance(ctx context.Context, podName, s
 		UserData:   base64.StdEncoding.EncodeToString([]byte(userData)),
 	}
 
+	// Wait for VM to be active and fetch the IPs
+	instance, err := p.createVM(ctx, instanceName, body)
+	if err != nil {
+		logger.Printf("failed to create the VM : %v", err)
+		return nil, err
+	}
+	return instance, nil
+}
+
+func (p *ibmcloudPowerVSProvider) createVM(ctx context.Context, instanceName string, body *models.PVMInstanceCreate) (*provider.Instance, error) {
 	logger.Printf("CreateInstance: name: %q", instanceName)
 
 	pvsInstances, err := p.powervsService.instanceClient(ctx).Create(body)
@@ -127,7 +138,7 @@ func (p *ibmcloudPowerVSProvider) CreateInstance(ctx context.Context, podName, s
 	logger.Printf("Waiting for instance to reach state: ACTIVE")
 	err = retry.Do(
 		func() error {
-			in, err := p.powervsService.instanceClient(getctx).Get(*ins.PvmInstanceID)
+			in, err := p.powervsService.instanceClient(getctx).Get(instanceID)
 			if err != nil {
 				return fmt.Errorf("failed to get the instance: %v", err)
 			}
@@ -163,6 +174,7 @@ func (p *ibmcloudPowerVSProvider) CreateInstance(ctx context.Context, podName, s
 		Name: instanceName,
 		IPs:  ips,
 	}, nil
+
 }
 
 func (p *ibmcloudPowerVSProvider) DeleteInstance(ctx context.Context, instanceID string) error {
@@ -173,8 +185,9 @@ func (p *ibmcloudPowerVSProvider) DeleteInstance(ctx context.Context, instanceID
 		return err
 	}
 
-	logger.Printf("deleted an instance %s", instanceID)
+	logger.Printf("deleted instance %s", instanceID)
 	return nil
+
 }
 
 func (p *ibmcloudPowerVSProvider) Teardown() error {
@@ -296,4 +309,129 @@ func (p *ibmcloudPowerVSProvider) getIPFromDHCPServer(ctx context.Context, insta
 	}
 
 	return ip, nil
+}
+func (p *ibmcloudPowerVSProvider) InitialisePool(poolSize int, ippool *provider.IPPool, precreatedVMs *[]provider.Instance) error {
+
+	if poolSize > 0 {
+		logger.Printf("Creating a new pod VM pool of size %d", poolSize)
+		if err := p.createOrUpdatePodVMPool(context.Background(), poolSize, ippool, precreatedVMs); err != nil {
+			return err
+		}
+	}
+
+	go p.checkPodVMPoolSize(context.Background(), poolSize, ippool, precreatedVMs)
+
+	return nil
+}
+
+// createOrUpdatePodVMPool created a new pool or updates the existing pool of pre-created VMs.
+func (p *ibmcloudPowerVSProvider) createOrUpdatePodVMPool(ctx context.Context, poolsize int, ipool *provider.IPPool, vms *[]provider.Instance) error {
+	for i := 0; i < poolsize; i++ {
+		instanceName := util.GenerateInstanceName("pool", util.RandomString(5), maxInstanceNameLen)
+		logger.Printf("Creating a VM with name %s", instanceName)
+		body := &models.PVMInstanceCreate{
+			ServerName:  &instanceName,
+			ImageID:     &p.serviceConfig.ImageId,
+			KeyPairName: p.serviceConfig.SSHKey,
+			Networks: []*models.PVMInstanceAddNetwork{
+				{
+					NetworkID: &p.serviceConfig.NetworkID,
+				}},
+			Memory:     core.Float64Ptr(p.serviceConfig.Memory),
+			Processors: core.Float64Ptr(p.serviceConfig.Processors),
+			ProcType:   core.StringPtr(p.serviceConfig.ProcessorType),
+			SysType:    p.serviceConfig.SystemType,
+		}
+
+		instance, err := p.createVM(ctx, instanceName, body)
+		if err != nil {
+			logger.Printf("failed to create the VM : %v", err)
+			return err
+		}
+
+		ipool.IPs[instance.IPs[0].String()] = false
+		*vms = append(*vms, *instance)
+		logger.Printf("VM created successfully and added to the pool, Name: %s, ID: %s", instanceName, instance.ID)
+	}
+
+	logger.Printf("PreCreatedInstances: (%v)\nPodvm pool size: %d", *vms, len(*vms))
+	return nil
+}
+
+// checkPodVMPoolSize monitors and updates the podVM pool with the desired number of instances.
+func (p *ibmcloudPowerVSProvider) checkPodVMPoolSize(ctx context.Context, poolSize int, ipool *provider.IPPool, vms *[]provider.Instance) {
+	checkInterval := 15 * time.Minute
+
+	for {
+		logger.Println("Sleep for 15 mins before checking for pool restock...")
+		time.Sleep(checkInterval)
+
+		// Check if the VMs in the pool exist and are in active state in the cloud
+		logger.Print("Checking the pod VMs state in the pool")
+		for i, instance := range *vms {
+			instancesList := *vms
+			ins, err := p.powervsService.instanceClient(ctx).Get(instance.ID)
+			if err != nil {
+				if strings.Contains(err.Error(), "pvm-instance does not exist") {
+					logger.Printf("pod VM %s does not exist in the pool", instance.Name)
+					*vms = append(instancesList[:i], instancesList[i+1:]...)
+					continue
+				}
+				logger.Printf("failed to get the instance %s present in the pool: %v", instance.Name, err)
+				continue
+			}
+
+			if *ins.Status != "ACTIVE" || *ins.Status == "ERROR" {
+				if err := p.DeleteInstance(ctx, instance.ID); err != nil {
+					logger.Printf("failed to delete pre-created instance: %v", err)
+					continue
+				}
+				logger.Printf("deleted pod VM in error state from the pool %s", instance.Name)
+				*vms = append(instancesList[:i], instancesList[i+1:]...)
+			}
+			logger.Printf("Pod VM %s is in active state", instance.Name)
+		}
+
+		count := len(*vms)
+		logger.Printf("PreCreatedInstances: (%v)\n Current pod VM pool size: %d", vms, count)
+
+		if count < poolSize {
+			logger.Printf("Pool size(%d) is less than desired size(%d), restocking the pool.", count, poolSize)
+			podVMPoolSize := poolSize - count
+			logger.Printf("Updating pool with adding %d pod VMs", podVMPoolSize)
+			if err := p.createOrUpdatePodVMPool(ctx, poolSize, ipool, vms); err != nil {
+				logger.Printf("failed to update the podVM pool: %v", err)
+				continue
+			}
+		}
+	}
+}
+
+// destroyPodVMPool deletes the pre-created VMs.
+func (p *ibmcloudPowerVSProvider) DeletePool(vms *[]provider.Instance) error {
+	var errs []error
+	logger.Println("Destroying the pod VM pool")
+	for _, instance := range *vms {
+		logger.Printf("Deleting instance, name: %s, id: %s", instance.Name, instance.ID)
+		if err := p.DeleteInstance(context.Background(), instance.ID); err != nil {
+			logger.Printf("failed to delete pre-created instance: %v", err)
+			errs = append(errs, err)
+			continue
+		}
+	}
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
+
+	logger.Println("Successfully destroyed pod VM pool")
+	return nil
+}
+
+func (provider *ibmcloudPowerVSProvider) AllocateIP() (string, error) {
+	return "", nil
+
+}
+
+func (provider *ibmcloudPowerVSProvider) ReleaseIP(ip string) error {
+	return nil
 }

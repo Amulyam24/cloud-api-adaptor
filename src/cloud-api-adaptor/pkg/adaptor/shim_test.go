@@ -98,8 +98,9 @@ func TestShim(t *testing.T) {
 		PeerPodsLimitPerNode:    -1,
 	}
 
+	poolcfg := cloud.PoolingConfig{}
 	provider := &mockProvider{primaryIP: primaryIP, secondaryIP: secondaryIP}
-	srv := NewServer(provider, serverConfig, workerNode)
+	srv := NewServer(provider, serverConfig, &poolcfg, workerNode)
 
 	serverDone := make(chan struct{})
 	go func() {

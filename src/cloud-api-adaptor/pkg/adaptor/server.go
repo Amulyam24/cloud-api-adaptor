@@ -47,15 +47,17 @@ type server struct {
 	socketPath              string
 	stopOnce                sync.Once
 	enableCloudConfigVerify bool
+	poolingConfig           *cloud.PoolingConfig
 	PeerPodsLimitPerNode    int
 }
 
-func NewServer(provider provider.Provider, cfg *cloud.ServerConfig, workerNode podnetwork.WorkerNode) Server {
+func NewServer(provider provider.Provider, cfg *cloud.ServerConfig, poolCfg *cloud.PoolingConfig, workerNode podnetwork.WorkerNode) Server {
 
 	logger.Printf("server config: %#v", cfg)
+	logger.Printf("pooling config: %#v", *poolCfg)
 
 	agentFactory := proxy.NewFactory(cfg.PauseImage, cfg.TLSConfig, cfg.ProxyTimeout)
-	cloudService := cloud.NewService(provider, agentFactory, workerNode, cfg, sshutil.SSHPORT)
+	cloudService := cloud.NewService(provider, poolCfg, agentFactory, workerNode, cfg, sshutil.SSHPORT)
 	vmInfoService := vminfo.NewService(cloudService)
 
 	return &server{
@@ -65,6 +67,7 @@ func NewServer(provider provider.Provider, cfg *cloud.ServerConfig, workerNode p
 		workerNode:              workerNode,
 		readyCh:                 make(chan struct{}),
 		stopCh:                  make(chan struct{}),
+		poolingConfig:           poolCfg,
 		enableCloudConfigVerify: cfg.EnableCloudConfigVerify,
 		PeerPodsLimitPerNode:    cfg.PeerPodsLimitPerNode,
 	}
@@ -74,6 +77,12 @@ func (s *server) Start(ctx context.Context) (err error) {
 	if s.enableCloudConfigVerify {
 		verifierErr := s.cloudService.ConfigVerifier()
 		if verifierErr != nil {
+			return err
+		}
+	}
+
+	if s.poolingConfig.UsePooling {
+		if err := s.cloudService.InitialisePool(); err != nil {
 			return err
 		}
 	}
@@ -116,6 +125,15 @@ func (s *server) Start(ctx context.Context) (err error) {
 		if ttRpcShutdownErr != nil && err == nil {
 			err = ttRpcShutdownErr
 		}
+	}()
+
+	defer func() {
+		if s.poolingConfig.UsePooling {
+			if delerr := s.cloudService.DeletePool(); err != nil {
+				err = delerr
+			}
+		}
+
 	}()
 
 	close(s.readyCh)

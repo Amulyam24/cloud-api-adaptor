@@ -34,6 +34,10 @@ optionals+=""
 [[ "${SECURE_COMMS_KBS_ADDR}" ]] && optionals+="-secure-comms-kbs ${SECURE_COMMS_KBS_ADDR} "
 [[ "${PEERPODS_LIMIT_PER_NODE}" ]] && optionals+="-peerpods-limit-per-node ${PEERPODS_LIMIT_PER_NODE} "
 [[ "${DISABLECVM}" == "true" ]] && optionals+="-disable-cvm "
+[[ "${USE_POOLING}" ]] && optionals+="-use-pooling ${USE_POOLING} "
+[[ "${PUD_PORT}" ]] && optionals+="-pud-port ${PUD_PORT} "
+[[ "${POOL_SIZE}" ]] && optionals+="-pool-size ${POOL_SIZE} "
+[[ "${POOL_IPS}" ]] && optionals+="-pool-ips ${POOL_IPS} "
 
 test_vars() {
     for i in "$@"; do

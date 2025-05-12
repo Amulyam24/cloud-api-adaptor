@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/netip"
 	"strings"
+	"sync"
 
 	"github.com/confidential-containers/cloud-api-adaptor/src/cloud-providers/util/cloudinit"
 )
@@ -18,6 +19,10 @@ type Provider interface {
 	DeleteInstance(ctx context.Context, instanceID string) error
 	Teardown() error
 	ConfigVerifier() error
+	InitialisePool(int, *IPPool, *[]Instance) error
+	AllocateIP() (string, error)
+	ReleaseIP(string) error
+	DeletePool(*[]Instance) error
 }
 
 // keyValueFlag represents a flag of key-value pairs
@@ -52,6 +57,11 @@ func (k *KeyValueFlag) Set(value string) error {
 	}
 
 	return nil
+}
+
+type IPPool struct {
+	Mu  sync.Mutex
+	IPs map[string]bool
 }
 
 type Instance struct {

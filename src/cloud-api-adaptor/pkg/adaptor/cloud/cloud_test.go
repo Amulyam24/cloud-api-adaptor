@@ -46,6 +46,19 @@ func (p *mockProvider) Teardown() error {
 	return nil
 }
 
+func (p *mockProvider) InitialisePool(int, *provider.IPPool, *[]provider.Instance) error {
+	return nil
+}
+func (p *mockProvider) AllocateIP() (string, error) {
+	return "", nil
+}
+func (p *mockProvider) ReleaseIP(ip string) error {
+	return nil
+}
+func (p *mockProvider) DeletePool(*[]provider.Instance) error {
+	return nil
+}
+
 func (p *mockProvider) ConfigVerifier() error {
 	return nil
 }
@@ -128,8 +141,10 @@ func TestCloudService(t *testing.T) {
 		ForwarderPort: forwarder.DefaultListenPort,
 	}
 
+	poolCfg := &PoolingConfig{}
+
 	// false, "", "", "", "", "", dir, forwarder.DefaultListenPort, ""
-	s := NewService(&mockProvider{}, proxyFactory, &mockWorkerNode{}, cfg, "")
+	s := NewService(&mockProvider{}, poolCfg, proxyFactory, &mockWorkerNode{}, cfg, "")
 
 	assert.NotNil(t, s)
 
@@ -199,8 +214,9 @@ func TestCloudServiceWithSecureComms(t *testing.T) {
 		ForwarderPort:         forwarder.DefaultListenPort,
 		SecureCommsKbsAddress: "127.0.0.1:9009",
 	}
+	poolCfg := &PoolingConfig{}
 
-	s := NewService(&mockProvider{}, proxyFactory, &mockWorkerNode{}, cfg, sshport)
+	s := NewService(&mockProvider{}, poolCfg, proxyFactory, &mockWorkerNode{}, cfg, sshport)
 
 	assert.NotNil(t, s)
 

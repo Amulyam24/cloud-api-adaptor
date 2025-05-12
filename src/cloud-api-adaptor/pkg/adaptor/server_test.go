@@ -159,7 +159,8 @@ func newServer(t *testing.T, socketPath, podsDir string) Server {
 		EnableCloudConfigVerify: false,
 		PeerPodsLimitPerNode:    -1,
 	}
-	return NewServer(provider, serverConfig, &mockWorkerNode{})
+	poolcfg := cloud.PoolingConfig{}
+	return NewServer(provider, serverConfig, &poolcfg, &mockWorkerNode{})
 }
 
 func testServerShutdown(t *testing.T, s Server, socketPath, dir string, serverErrCh chan error) {
@@ -195,6 +196,19 @@ func (n *mockWorkerNode) Teardown(nsPath string, config *tunneler.Config) error 
 type mockProvider struct {
 	primaryIP   string
 	secondaryIP string
+}
+
+func (p *mockProvider) InitialisePool(int, *provider.IPPool, *[]provider.Instance) error {
+	return nil
+}
+func (p *mockProvider) AllocateIP() (string, error) {
+	return "", nil
+}
+func (p *mockProvider) ReleaseIP(ip string) error {
+	return nil
+}
+func (p *mockProvider) DeletePool(*[]provider.Instance) error {
+	return nil
 }
 
 func (p *mockProvider) CreateInstance(ctx context.Context, podName, sandboxID string, cloudConfig cloudinit.CloudConfigGenerator, spec provider.InstanceTypeSpec) (*provider.Instance, error) {
