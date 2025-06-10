@@ -25,13 +25,19 @@ TEE_PLATFORM ?= none
 CDH_RESOURCE_PROVIDER ?= kbs
 SEALED_SECRET ?= yes
 
+HOST_ARCH   := $(shell uname -m)
+ARCH        := $(or $(ARCH),$(HOST_ARCH))
+LIBC        ?= $(if $(filter $(ARCH),s390x ppc64le),gnu,musl)
+RUST_ARCH   ?= $(subst ppc64le,powerpc64le,$(ARCH))
+RUST_TARGET := $(RUST_ARCH)-unknown-linux-$(LIBC)
+
 AGENT_POLICY ?= yes
 AGENT_POLICY_PATH := $(FILES_DIR)/etc/kata-opa
 DEFAULT_AGENT_POLICY_FILE ?= allow-all.rego
 
 # Run github artifact provenance verifications
 VERIFY_PROVENANCE ?= no
-GUEST_COMPONENTS_REPO := confidential-containers/guest-components
+GUEST_COMPONENTS_REPO := https://github.com/Amulyam24/guest-components
 KATA_REPO := kata-containers/kata-containers
 
 # probe version if the ref does not appear to be a git commit digest
@@ -87,12 +93,10 @@ CONFIDENTIAL_DATA_HUB = $(FILES_DIR)/usr/local/bin/confidential-data-hub
 API_SERVER_REST  = $(FILES_DIR)/usr/local/bin/api-server-rest
 PROCESS_USER_DATA = $(FILES_DIR)/usr/local/bin/process-user-data
 
-
 # Allow BINARIES to be overriden externally
 
 BINARIES ?= \
 	$(AGENT_PROTOCOL_FORWARDER) \
-	$(API_SERVER_REST) \
 	$(ATTESTATION_AGENT) \
 	$(CONFIDENTIAL_DATA_HUB) \
 	$(KATA_AGENT) \
@@ -101,6 +105,7 @@ BINARIES ?= \
 
 SKOPEO_SRC ?= skopeo
 SKOPEO_BIN ?= $(SKOPEO_SRC)/bin/skopeo
+GUEST_COMPONENTS_SRC = ../../../guest-components
 
 UMOCI_SRC   = umoci
 
@@ -160,6 +165,9 @@ define generate_tag
 	$(1) := $$(processed_tag)-$(3)
 endef
 
+$(GUEST_COMPONENTS_SRC):
+	$(call git_clone_repo_ref,$(GUEST_COMPONENTS_REPO),$(GUEST_COMPONENTS_SRC),ppc64le)
+
 binaries: $(BINARIES)
 
 $(AGENT_PROTOCOL_FORWARDER): always
@@ -200,15 +208,17 @@ $(PAUSE_SRC): $(SKOPEO_BIN)
 $(PAUSE): | $(PAUSE_SRC) $(UMOCI_SRC)/umoci
 	$(UMOCI_SRC)/umoci unpack --rootless --image "$(PAUSE_SRC):$(PAUSE_VERSION)" "${FILES_DIR}/$(PAUSE_BUNDLE)"
 
-$(ATTESTATION_AGENT): $(FORCE_TARGET)
-	$(call pull_gc_artifact,attestation-agent,$(TEE_PLATFORM)_$(ARCH))
-	tar xvJpf attestation-agent.tar.xz
-	install -D --compare attestation-agent "$@"
+$(ATTESTATION_AGENT): $(FORCE_TARGET) | $(GUEST_COMPONENTS_SRC)
+	cd "$(GUEST_COMPONENTS_SRC)/attestation-agent/attestation-agent" && cargo build --release --no-default-features --features "coco_as,kbs bin,ttrpc,openssl" --bin ttrpc-aa --target powerpc64le-unknown-linux-gnu
+	mkdir -p "$(@D)"
+	mv "$(GUEST_COMPONENTS_SRC)/target/$(RUST_TARGET)/release/ttrpc-aa" "$(GUEST_COMPONENTS_SRC)/target/$(RUST_TARGET)/release/attestation-agent"
+	install --compare "$(GUEST_COMPONENTS_SRC)/target/$(RUST_TARGET)/release/attestation-agent" "$@"
 
-$(CONFIDENTIAL_DATA_HUB): $(FORCE_TARGET)
-	$(call pull_gc_artifact,confidential-data-hub,$(ARCH))
-	tar xvJpf confidential-data-hub.tar.xz
-	install -D --compare confidential-data-hub "$@"
+$(CONFIDENTIAL_DATA_HUB): $(FORCE_TARGET)| $(GUEST_COMPONENTS_SRC)
+	cd "$(GUEST_COMPONENTS_SRC)/confidential-data-hub/hub" && cargo build --release --no-default-features --features "bin,ttrpc kbs aliyun,ehsm" --bin ttrpc-cdh --target powerpc64le-unknown-linux-gnu
+	mkdir -p "$(@D)"
+	mv "$(GUEST_COMPONENTS_SRC)/target/$(RUST_TARGET)/release/ttrpc-cdh" "$(GUEST_COMPONENTS_SRC)/target/$(RUST_TARGET)/release/confidential-data-hub"
+	install --compare "$(GUEST_COMPONENTS_SRC)/target/$(RUST_TARGET)/release/confidential-data-hub" "$@"
 
 $(API_SERVER_REST): $(FORCE_TARGET)
 	$(call pull_gc_artifact,api-server-rest,$(ARCH))
