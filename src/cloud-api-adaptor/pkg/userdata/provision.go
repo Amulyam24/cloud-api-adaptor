@@ -127,7 +127,7 @@ func (a AlibabaCloudDataProvider) GetUserData(ctx context.Context) ([]byte, erro
 func newProvider(ctx context.Context) (UserDataProvider, error) {
 	// This checks for the presence of a file and doesn't rely on http req like the
 	// azure, aws ones, thereby making it faster and hence checking this first
-	if hasUserDataFile() {
+	if hasUserDataFile(ctx) {
 		return FileUserDataProvider{}, nil
 	}
 

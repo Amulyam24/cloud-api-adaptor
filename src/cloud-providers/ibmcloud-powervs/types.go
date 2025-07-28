@@ -3,7 +3,10 @@
 
 package ibmcloud_powervs
 
-import "github.com/confidential-containers/cloud-api-adaptor/src/cloud-providers/util"
+import (
+	"github.com/confidential-containers/cloud-api-adaptor/src/cloud-providers/util"
+	"golang.org/x/crypto/ssh"
+)
 
 type Config struct {
 	ApiKey            string
@@ -17,6 +20,11 @@ type Config struct {
 	ProcessorType     string
 	SystemType        string
 	UsePublicIP       bool
+	EnableStfp        bool
+	pubkey            ssh.PublicKey
+	pubKeyString      string
+	privKey           string
+	CloudUserName     string
 }
 
 func (c Config) Redact() Config {
