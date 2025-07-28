@@ -31,18 +31,30 @@ if [ -e "${PODVM_DIR}"/files/etc/certificates/ca.crt ]; then
     sudo cp "${PODVM_DIR}"/files/etc/certificates/ca.crt /etc/certificates/
 fi
 
+if [ "${ENABLE_SFTP}" = "true" ]; then
+    echo "SFTP changes"
+    systemctl enable process-user-data.path
+	systemctl disable process-user-data.service
+    systemctl enable reboot-watcher.path
+fi
 
+echo "Adding user files"
 sudo mkdir -p /usr/local/bin
 sudo cp -a "${PODVM_DIR}"/files/usr/* /usr/
 
+echo "Adding pause files"
 sudo cp -a "${PODVM_DIR}"/files/pause_bundle /
 
+echo "Adding kata opa files"
 # Copy the kata-agent OPA policy files
 sudo mkdir -p /etc/kata-opa
 sudo cp -a "${PODVM_DIR}"/files/etc/kata-opa/* /etc/kata-opa/
 sudo cp -a "${PODVM_DIR}"/files/etc/tmpfiles.d/policy.conf /etc/tmpfiles.d/
 
+echo "Adding auth files"
 # Copy an empty auth.json for image pulling
 sudo mkdir -p /etc/kata-oci
 sudo cp -a "${PODVM_DIR}"/files/etc/kata-oci/* /etc/kata-oci/
 sudo cp -a "${PODVM_DIR}"/files/etc/tmpfiles.d/auth.conf /etc/tmpfiles.d/
+
+echo "Done"

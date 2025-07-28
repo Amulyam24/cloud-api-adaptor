@@ -6,6 +6,7 @@ SKOPEO_SRC =
 SKOPEO_BIN = /usr/bin/skopeo
 
 export FORWARDER_PORT ?=
+export ENABLE_SFTP ?=
 
 ROOT_DIR := $(dir $(lastword $(MAKEFILE_LIST)))../../
 include $(ROOT_DIR)podvm/Makefile.inc
@@ -16,7 +17,7 @@ prerequisites: ## Install dependencies
 	./prereq.sh
 
 build: prerequisites $(BINARIES)
-	./copy-files.sh
+	bash -x ./copy-files.sh
 
 clean:
 	rm -f $(BINARIES)
