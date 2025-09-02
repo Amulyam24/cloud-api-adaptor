@@ -19,9 +19,9 @@ import (
 var logger = log.New(log.Writer(), "[adaptor/cloud/byom] ", log.LstdFlags|log.Lmsgprefix)
 
 const (
-	sshPort          = "22"
-	remoteFile       = "/media/cidata/user-data" // Standard cloud-init user-data location
-	remoteRebootFile = "/media/cidata/reboot"
+	sshPort    = "22"
+	remoteFile = "/media/cidata/user-data" // Standard cloud-init user-data location
+	rebootFile = "/media/cidata/reboot"    // Reboot trigger file
 )
 
 // byomProvider implements the Provider interface for BYOM
@@ -118,8 +118,10 @@ func (p *byomProvider) DeleteInstance(ctx context.Context, instanceID string) er
 		return fmt.Errorf("invalid instance ID %s: %w", instanceID, err)
 	}
 
-	if err := p.sendConfigFile("", ip); err != nil {
-		return fmt.Errorf("failed to create reboot file on VM %s: %w", ip.String(), err)
+	// Send reboot trigger file to VM before deallocating
+	if err := p.sendRebootFile(ip); err != nil {
+		logger.Printf("Warning: failed to send reboot file to VM %s: %v", ip.String(), err)
+		// Continue with deallocation even if reboot file sending fails
 	}
 
 	// Return IP to pool
@@ -199,5 +201,29 @@ func (p *byomProvider) sendConfigFile(userData string, ip netip.Addr) error {
 	}
 
 	logger.Printf("Successfully sent user-data to VM %s", ip.String())
+	return nil
+}
+
+// sendRebootFile sends a reboot trigger file to a VM via SFTP
+func (p *byomProvider) sendRebootFile(ip netip.Addr) error {
+	sshClientConfig := &util.SSHClientConfig{
+		Username:              p.serviceConfig.SSHUserName,
+		PrivateKey:            p.serviceConfig.SSHPrivKey,
+		Timeout:               time.Duration(p.serviceConfig.SSHTimeout) * time.Second,
+		InsecureIgnoreHostKey: p.serviceConfig.SSHInsecureIgnoreHostKey,
+	}
+
+	sshConfig, err := util.CreateSSHClientConfig(sshClientConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create SSH config: %w", err)
+	}
+
+	address := net.JoinHostPort(ip.String(), sshPort)
+	rebootData := []byte("reboot")
+	if err := util.SendFileViaSFTP(address, sshConfig, rebootFile, rebootData); err != nil {
+		return fmt.Errorf("failed to send reboot file to VM %s: %w", ip.String(), err)
+	}
+
+	logger.Printf("Successfully sent reboot trigger to VM %s", ip.String())
 	return nil
 }
