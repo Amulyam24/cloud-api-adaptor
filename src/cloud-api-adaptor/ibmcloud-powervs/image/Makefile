@@ -4,7 +4,10 @@
 
 SKOPEO_SRC =
 SKOPEO_BIN = /usr/bin/skopeo
+SETUP_SFTP ?= no
 
+export USER_NAME ?= peerpod
+export DISABLE_SSH_LOGIN ?= false
 export FORWARDER_PORT ?=
 
 ROOT_DIR := $(dir $(lastword $(MAKEFILE_LIST)))../../
@@ -16,7 +19,10 @@ prerequisites: ## Install dependencies
 	./prereq.sh
 
 build: prerequisites $(BINARIES)
-	./copy-files.sh
+	bash -x ./copy-files.sh
+ifeq ($(SETUP_SFTP),yes)
+	bash -x ./setup-sftp.sh
+endif
 
 clean:
 	rm -f $(BINARIES)

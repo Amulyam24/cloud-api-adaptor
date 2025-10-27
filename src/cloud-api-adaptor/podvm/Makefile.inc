@@ -125,7 +125,7 @@ endef
 # $(1) - Artifact name
 # $(2) - Tag suffix
 define pull_gc_artifact
-	$(eval $(call generate_tag,tag,$(GUEST_COMPONENTS_REF),$(2)))
+	$(eval $(call generate_tag,tag,93990639efc42612618735c6ceaad4a510726212,$(2)))
 	$(eval OCI_IMAGE := $(GUEST_COMPONENTS_REGISTRY)/$(1))
 	$(eval OCI_DIGEST := $(shell oras resolve $(OCI_IMAGE):${tag}))
 	$(eval OCI_REF := $(OCI_IMAGE)@$(OCI_DIGEST))
