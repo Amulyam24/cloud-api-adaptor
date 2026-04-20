@@ -1,0 +1,58 @@
+# Dockerfile for BYOM PodVM with SSH/SFTP support
+# Based on the standard Docker PodVM image with added SSH capabilities
+# Includes services from mkosi.skeleton-sftp for compatibility
+
+ARG BASE_IMAGE=quay.io/confidential-containers/podvm-docker-image:latest
+
+FROM $BASE_IMAGE
+
+# Install SSH server and related utilities
+RUN dnf install -y \
+    openssh-server \
+    openssh-clients \
+    && dnf clean all
+
+# Create peerpod user for SFTP access (matching mkosi.skeleton-sftp)
+RUN useradd -m -s /bin/bash peerpod && \
+    mkdir -p /home/peerpod/.ssh && \
+    touch /home/peerpod/.ssh/authorized_keys && \
+    chmod 700 /home/peerpod/.ssh && \
+    chmod 600 /home/peerpod/.ssh/authorized_keys && \
+    chown -R peerpod:peerpod /home/peerpod/.ssh
+
+# Create SSH runtime directory for host keys (required by sshd_config)
+RUN mkdir -p /run/ssh
+
+# Create /media/cidata directory for SFTP (matching mkosi.skeleton-sftp)
+RUN mkdir -p /media/cidata && \
+    chmod 755 /media/cidata
+
+# Copy SSH configuration from mkosi.skeleton-sftp
+COPY mkosi.skeleton-sftp/etc/ssh/sshd_config /etc/ssh/sshd_config
+
+# Copy systemd service files from mkosi.skeleton-sftp
+# Note: reboot-watcher not needed as we use Docker's --restart=always policy
+COPY mkosi.skeleton-sftp/usr/lib/systemd/system/media-cidata.mount /usr/lib/systemd/system/
+COPY mkosi.skeleton-sftp/usr/lib/systemd/system/sftp-dir.service /usr/lib/systemd/system/
+
+# Copy systemd preset file
+RUN mkdir -p /usr/lib/systemd/system-preset
+COPY mkosi.skeleton-sftp/usr/lib/systemd/system-preset/40-sftp-sys.preset /usr/lib/systemd/system-preset/
+
+# Enable SSH and SFTP-related services
+# Note: reboot-watcher.path not enabled as Docker handles restart via --restart=always
+RUN systemctl enable sshd && \
+    systemctl enable media-cidata.mount && \
+    systemctl enable sftp-dir.service
+
+# Expose SSH port
+EXPOSE 22
+
+# Add labels to identify this as BYOM image
+LABEL io.caa.provider="byom" \
+      io.caa.ssh="enabled" \
+      io.caa.sftp="enabled" \
+      io.caa.description="BYOM PodVM container with SSH/SFTP support from mkosi.skeleton-sftp"
+
+# Inherit entrypoint from base image
+# ENTRYPOINT and CMD are already set in base image

@@ -12,6 +12,7 @@ PODVM_BUILDER_IMAGE ?= $(REGISTRY)/podvm-builder-$(PODVM_DISTRO)-$(DISTRO_ARCH):
 PODVM_BINARIES_IMAGE ?= $(REGISTRY)/podvm-binaries-$(PODVM_DISTRO)-$(DISTRO_ARCH):$(PODVM_TAG)
 PODVM_IMAGE ?= $(REGISTRY)/podvm-generic-$(PODVM_DISTRO)$(if $(filter $(SE_BOOT),true),-se,)-$(DISTRO_ARCH):$(PODVM_TAG)
 PODVM_CONTAINER_NAME ?= $(REGISTRY)/podvm-docker-image-$(DISTRO_ARCH)
+PODVM_BYOM_CONTAINER_NAME ?= $(REGISTRY)/podvm-byom-image-$(DISTRO_ARCH)
 VERIFY_PROVENANCE ?= no
 MKOSI_VERSION ?= v22
 
@@ -34,6 +35,9 @@ sftp:binaries image-sftp
 
 .PHONY: container
 container: binaries image-container
+
+.PHONY: byom-container
+byom-container: image-byom-container
 
 ifeq ($(PODVM_DISTRO),ubuntu)
 DISTRO_IMAGE := ubuntu:24.04
@@ -178,6 +182,15 @@ image-container:
 		-t $(PODVM_CONTAINER_NAME):latest \
 		-f Dockerfile.podvm_docker_provider$(if $(filter $(PODVM_DISTRO),ubuntu),.ubuntu,) .
 
+PHONY: image-byom-container
+image-byom-container:
+	@echo "Building BYOM podvm container image with SSH support..."
+	docker buildx build \
+		-t $(PODVM_BYOM_CONTAINER_NAME):$(PODVM_TAG) \
+		-t $(PODVM_BYOM_CONTAINER_NAME):latest \
+		--build-arg BASE_IMAGE=$(PODVM_CONTAINER_NAME):latest \
+		-f Dockerfile.podvm_byom_docker_provider .
+
 PHONY: push-image
 push-image:
 	@echo "Push podvm image to remote repository..."
@@ -194,6 +207,12 @@ push-image-container:
 	@echo "Push podvm container image to remote repository..."
 	docker push $(PODVM_CONTAINER_NAME):$(PODVM_TAG)
 	docker push $(PODVM_CONTAINER_NAME):latest
+
+PHONY: push-image-byom-container
+push-image-byom-container:
+	@echo "Push BYOM podvm container image to remote repository..."
+	docker push $(PODVM_BYOM_CONTAINER_NAME):$(PODVM_TAG)
+	docker push $(PODVM_BYOM_CONTAINER_NAME):latest
 
 PHONY: clean
 clean:
