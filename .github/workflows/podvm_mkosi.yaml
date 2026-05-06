@@ -214,3 +214,4 @@ jobs:
           echo "image=${{ inputs.registry }}/podvm-docker-image-${arch}:${tag}" >> "$GITHUB_OUTPUT"
         env:
           REGISTRY: ${{ inputs.registry }}
+
