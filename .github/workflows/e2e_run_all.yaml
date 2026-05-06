@@ -26,11 +26,7 @@ on:
         required: true
         type: string
     secrets:
-      AWS_IAM_ROLE_ARN:
-        required: true
       QUAY_PASSWORD:
-        required: true
-      REGISTRY_CREDENTIAL_ENCODED:
         required: true
 
 env:
@@ -49,6 +45,7 @@ permissions: {}
 
 jobs:
   podvm_builder:
+    if: false  # Disabled - not needed for BYOM
     uses: ./.github/workflows/podvm_builder.yaml
     with:
       registry: ${{ inputs.registry }}
@@ -61,6 +58,7 @@ jobs:
       QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
 
   podvm_binaries:
+    if: false  # Disabled - not needed for BYOM
     needs: [podvm_builder]
     uses: ./.github/workflows/podvm_binaries.yaml
     with:
@@ -74,6 +72,7 @@ jobs:
       QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
 
   podvm:
+    if: false  # Disabled - not needed for BYOM
     needs: [podvm_binaries]
     uses: ./.github/workflows/podvm.yaml
     with:
@@ -87,6 +86,7 @@ jobs:
       QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
 
   podvm_mkosi_amd64:
+    if: false  # Disabled - not needed for BYOM
     uses: ./.github/workflows/podvm_mkosi.yaml
     with:
       registry: ${{ inputs.registry }}
@@ -104,6 +104,7 @@ jobs:
       QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
 
   podvm_mkosi_s390x:
+    if: false  # Disabled - requires s390x runner
     uses: ./.github/workflows/podvm_mkosi.yaml
     with:
       registry: ${{ inputs.registry }}
@@ -138,6 +139,7 @@ jobs:
       QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
 
   podvm_ubuntu_s390x:
+    if: false  # Disabled - requires s390x runner
     uses: ./.github/workflows/podvm_mkosi_ubuntu.yaml
     with:
       registry: ${{ inputs.registry }}
@@ -170,6 +172,7 @@ jobs:
       QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
 
   caa_image_s390x:
+    if: false  # Disabled - requires s390x runner
     uses: ./.github/workflows/caa_build_and_push.yaml
     with:
       registry: ${{ inputs.registry }}
@@ -188,10 +191,7 @@ jobs:
   # Run AWS e2e tests if pull request labeled 'test_e2e_aws'
   aws:
     name: aws
-    if: |
-      github.event_name == 'schedule' ||
-      github.event_name == 'workflow_dispatch' ||
-      contains(github.event.pull_request.labels.*.name, 'test_e2e_aws')
+    if: false  # Disabled for BYOM-only testing
     needs: [podvm, caa_image_amd64]
     strategy:
       fail-fast: false
@@ -218,6 +218,7 @@ jobs:
       AWS_IAM_ROLE_ARN: ${{ secrets.AWS_IAM_ROLE_ARN }}
 
   libvirt_e2e_arch_prep:
+    if: false  # Disabled - not needed for BYOM
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout Code
@@ -236,11 +237,7 @@ jobs:
   # Run libvirt amd64 e2e tests, based on the mkosi image, if pull request labeled 'test_e2e_libvirt'
   libvirt_amd64:
     name: E2E tests on libvirt for the amd64 architecture
-    if: |
-      github.event_name == 'schedule' ||
-      github.event_name == 'workflow_dispatch' ||
-      contains(github.event.pull_request.labels.*.name, 'test_e2e_libvirt') ||
-      contains(github.event.pull_request.labels.*.name, 'test_e2e_libvirt_amd64')
+    if: false  # Disabled - not needed for BYOM
     needs: [podvm_mkosi_amd64, libvirt_e2e_arch_prep, caa_image_amd64]
     uses: ./.github/workflows/e2e_libvirt.yaml
     with:
@@ -254,11 +251,7 @@ jobs:
   # Run libvirt s390x e2e tests, based on the mkosi image, if pull request labeled 'test_e2e_libvirt'
   libvirt_s390x:
     name: E2E tests on libvirt for the s390x architecture
-    if: |
-      github.event_name == 'schedule' ||
-      github.event_name == 'workflow_dispatch' ||
-      contains(github.event.pull_request.labels.*.name, 'test_e2e_libvirt') ||
-      contains(github.event.pull_request.labels.*.name, 'test_e2e_libvirt_s390x')
+    if: false  # Disabled for BYOM-only testing
     needs: [podvm_mkosi_s390x, libvirt_e2e_arch_prep, caa_image_s390x]
     uses: ./.github/workflows/e2e_libvirt.yaml
     with:
@@ -272,11 +265,7 @@ jobs:
   # Run libvirt amd64 e2e tests, based on the mkosi image, if pull request labeled 'test_e2e_libvirt'
   libvirt_ubuntu_amd64:
     name: E2E tests on libvirt, with the mkosi_ubuntu podvm image for the amd64 architecture
-    if: |
-      github.event_name == 'schedule' ||
-      github.event_name == 'workflow_dispatch' ||
-      contains(github.event.pull_request.labels.*.name, 'test_e2e_libvirt') ||
-      contains(github.event.pull_request.labels.*.name, 'test_e2e_libvirt_amd64')
+    if: false  # Disabled for BYOM-only testing
     needs: [podvm_ubuntu_amd64, libvirt_e2e_arch_prep, caa_image_amd64]
     uses: ./.github/workflows/e2e_libvirt.yaml
     with:
@@ -290,11 +279,7 @@ jobs:
   # Run libvirt s390x e2e tests, based on the mkosi image, if pull request labeled 'test_e2e_libvirt'
   libvirt_ubuntu_s390x:
     name: E2E tests on libvirt, with the mkosi_ubuntu podvm image for the s390x architecture
-    if: |
-      github.event_name == 'schedule' ||
-      github.event_name == 'workflow_dispatch' ||
-      contains(github.event.pull_request.labels.*.name, 'test_e2e_libvirt') ||
-      contains(github.event.pull_request.labels.*.name, 'test_e2e_libvirt_s390x')
+    if: false  # Disabled for BYOM-only testing
     needs: [podvm_ubuntu_s390x, libvirt_e2e_arch_prep, caa_image_s390x]
     uses: ./.github/workflows/e2e_libvirt.yaml
     with:
@@ -308,10 +293,7 @@ jobs:
   # Run docker e2e tests if pull request labeled 'test_e2e_docker'
   docker:
     name: docker
-    if: |
-      github.event_name == 'schedule' ||
-      github.event_name == 'workflow_dispatch' ||
-      contains(github.event.pull_request.labels.*.name, 'test_e2e_docker')
+    if: false  # Disabled for BYOM-only testing
     needs: [podvm_mkosi_amd64, caa_image_amd64]
     strategy:
       fail-fast: false
@@ -329,6 +311,18 @@ jobs:
       caa_image: ${{ inputs.registry }}/cloud-api-adaptor:${{ inputs.caa_image_tag }}-dev-amd64
       container_runtime: ${{ matrix.container_runtime }}
       podvm_image: ${{ needs.podvm_mkosi_amd64.outputs.docker_oci_image }}
+      git_ref: ${{ inputs.git_ref }}
+    secrets:
+      QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
+
+  # Run BYOM e2e tests on all PRs, schedule, and manual trigger
+  byom:
+    name: byom
+    needs: [podvm_ubuntu_amd64, caa_image_amd64]
+    uses: ./.github/workflows/e2e_byom.yaml
+    with:
+      caa_image: ${{ inputs.registry }}/cloud-api-adaptor:${{ inputs.caa_image_tag }}-dev-amd64
+      podvm_image: ${{ needs.podvm_ubuntu_amd64.outputs.byom_e2e_image }}
       git_ref: ${{ inputs.git_ref }}
     secrets:
       QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}

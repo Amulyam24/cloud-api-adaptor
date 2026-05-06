@@ -39,6 +39,4 @@ jobs:
       attestations: write
       artifact-metadata: write
     secrets:
-      AWS_IAM_ROLE_ARN: ${{ secrets.AWS_IAM_ROLE_ARN }}
       QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
-      REGISTRY_CREDENTIAL_ENCODED: ${{ secrets.REGISTRY_CREDENTIAL_ENCODED }}

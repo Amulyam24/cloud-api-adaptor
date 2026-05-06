@@ -35,10 +35,7 @@ permissions: {}
 jobs:
   authorize:
     runs-on: ubuntu-24.04
-    if: |
-     contains(github.event.pull_request.labels.*.name, 'test_e2e_aws') ||
-     contains(github.event.pull_request.labels.*.name, 'test_e2e_libvirt') ||
-     contains(github.event.pull_request.labels.*.name, 'test_e2e_docker')
+    # Run on all PRs for testing (remove label requirement)
     steps:
       - run: "true"
   e2e:
@@ -56,6 +53,4 @@ jobs:
       attestations: write
       artifact-metadata: write
     secrets:
-      AWS_IAM_ROLE_ARN: ${{ secrets.AWS_IAM_ROLE_ARN }}
       QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
-      REGISTRY_CREDENTIAL_ENCODED: ${{ secrets.REGISTRY_CREDENTIAL_ENCODED }}
