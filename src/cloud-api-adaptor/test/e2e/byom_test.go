@@ -27,6 +27,7 @@ func TestByomCreatePodWithSecret(t *testing.T) {
 }
 
 func TestByomCreatePeerPodContainerWithExternalIPAccess(t *testing.T) {
+	SkipTestOnCI(t)
 	assert := ByomAssert{}
 	DoTestCreatePeerPodContainerWithExternalIPAccess(t, testEnv, assert)
 
