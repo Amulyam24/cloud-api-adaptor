@@ -3,7 +3,7 @@
 [![nightly build for azure](https://github.com/confidential-containers/cloud-api-adaptor/actions/workflows/azure-nightly-build.yml/badge.svg)](https://github.com/confidential-containers/cloud-api-adaptor/actions/workflows/azure-nightly-build.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/confidential-containers/cloud-api-adaptor/badge)](https://scorecard.dev/viewer/?uri=github.com/confidential-containers/cloud-api-adaptor)
 
-# Introduction
+# Introduction to CAA
 
 This repository contains all go modules related to Cloud API Adaptor. The Cloud API Adaptor is an implementation of the
 [remote hypervisor interface](https://github.com/kata-containers/kata-containers/blob/main/src/runtime/virtcontainers/remote.go)
