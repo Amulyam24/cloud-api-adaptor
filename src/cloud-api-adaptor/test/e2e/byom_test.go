@@ -8,7 +8,7 @@ package e2e
 import (
 	"testing"
 
-	_ "github.com/confidential-containers/cloud-api-adaptor/src/cloud-api-adaptor/test/provisioner/byom"
+	"github.com/confidential-containers/cloud-api-adaptor/src/cloud-api-adaptor/test/provisioner/byom"
 )
 
 func TestByomCreateSimplePod(t *testing.T) {
@@ -85,4 +85,13 @@ func TestByomPodsMTLSCommunication(t *testing.T) {
 func TestByomCreateWithCpuAndMemRequestLimit(t *testing.T) {
 	assert := ByomAssert{}
 	DoTestPodWithCPUMemLimitsAndRequests(t, testEnv, assert, "100m", "100Mi", "200m", "200Mi")
+}
+
+func TestByomSSHHostKeysAllowlist(t *testing.T) {
+	if !byom.ByomProps.EnableHostKeys {
+		t.Skip("Skipping host keys allowlist test as ENABLE_HOST_KEYS is not enabled in provision properties")
+	}
+
+	assert := ByomAssert{}
+	DoTestCreateSimplePod(t, testEnv, assert)
 }
